@@ -1,8 +1,8 @@
 // Default requires
 
-const getBaseDataObj = (baseUrl, protocol) => {
+const getBaseDataObj = (url, protocol) => {
     return {
-        'url': baseUrl,
+        'url': url,
         'protocol': protocol,
         'visited': false,
         'statusCode': null,

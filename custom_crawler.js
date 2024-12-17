@@ -122,12 +122,12 @@ const confirmConfigSteps = [
         footerNote.push(chalk.bold(`${projectsFolder}/${projectName}`));
 
         console.log(boxedConfigMessage(
-            'YOUR CURRENT PROJECT CONFIGURATION',
+            'THIS IS YOUR CURRENT PROJECT CONFIGURATION',
             {
                 'Base URL': firstStepsResponse.websiteBaseUrl,
                 'Protocol': projectBaseUrlProtocol.replace(':', ''),
-                'Crawling restriction': crawlingRestriction,
-                'Crawling limit': pageLimit,
+                'Folder restriction': crawlingRestriction,
+                'Crawling limit': pageLimit === 0 ? 'Unlimited' : pageLimit,
                 'Crawling speed': crawlingSpeed
             },
             footerNote.join("\n"),
@@ -141,6 +141,7 @@ const confirmConfigSteps = [
             newProject = createProject(
                 firstStepsResponse.websiteBaseUrl,
                 projectBaseUrlProtocol,
+                crawlingRestriction === 'None' ? null : crawlingRestriction,
                 pageLimit,
                 crawlingSpeed
             )

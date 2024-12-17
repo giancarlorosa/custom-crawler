@@ -58,15 +58,11 @@ const projectExists = (baseUrl) => {
     return true;
 }
 
-const createProject = (baseUrl, protocol, pageLimit, crawlingSpeed) => {
-    console.log('Base URL: ', baseUrl);
-    console.log('Project Protocol: ', protocol);
-    console.log('Page Limit: ', pageLimit);
-    console.log('Crawling Speed: ', crawlingSpeed);
-
-    const projectConfig = { baseUrl, protocol, pageLimit, crawlingSpeed };
+const createProject = (baseUrl, protocol, folderRestriction = null, pageLimit = 500, crawlingSpeed = 'fast') => {
+    const firstUrlToCrawl = folderRestriction ? baseUrl + folderRestriction : baseUrl
+    const projectConfig = { baseUrl, protocol, folderRestriction, pageLimit, crawlingSpeed };
     const projectName = getProjectName(baseUrl);
-    const projectBaseData = getBaseDataObj(baseUrl, protocol);
+    const projectBaseData = getBaseDataObj(firstUrlToCrawl, protocol);
 
     if (projectExists(baseUrl) || !projectName) {
         return false;
@@ -78,8 +74,8 @@ const createProject = (baseUrl, protocol, pageLimit, crawlingSpeed) => {
 
     try {
         fs.mkdirSync(newProjectFolder);
-        fs.writeFileSync(`${projectsFolder}/${projectName}/config.json`, JSON.stringify(projectConfig), 'utf8');
-        fs.writeFileSync(`${projectsFolder}/${projectName}/data.json`, JSON.stringify([projectBaseData]), 'utf8');
+        fs.writeFileSync(newProjectConfigFile, JSON.stringify(projectConfig), 'utf8');
+        fs.writeFileSync(newProjectDataFile, JSON.stringify([projectBaseData]), 'utf8');
 
         return true;
     } catch (error) {
