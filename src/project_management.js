@@ -10,6 +10,15 @@ const { getBaseDataObj } = require('./crawler');
 const projectsFolder = './projects';
 const exportsFolder = `${projectsFolder}/exports`;
 
+const getRunningProjectsConfig = () => {
+    try {
+        const runningProjectsConfig = fs.readFileSync(`${projectsFolder}/config.json`, 'utf8');
+        return JSON.parse(runningProjectsConfig);
+    } catch (error) {
+        return false;
+    }
+}
+
 const getProjectPredefinedConfigs = (config) => {
     const predefinedConfigs = {
         'small': {
@@ -58,13 +67,58 @@ const projectExists = (baseUrl) => {
     return true;
 }
 
+const runningProjectExists = (baseUrl) => {
+    const runningProjectsConfig = getRunningProjectsConfig();
+
+    if (!runningProjectsConfig) {
+        return false;
+    }
+
+    return runningProjectsConfig.filter(project => project.baseUrl === baseUrl).length > 0;
+}
+
+const setRunningProject = (baseUrl) => {
+    const runningProjectsConfig = getRunningProjectsConfig();
+    const runningProject = runningProjectExists(baseUrl);
+    const runningProjectConfigFile = `${projectsFolder}/config.json`;
+    let runningProjectConfigData = [];
+
+    try {
+        if (!runningProjectsConfig) {
+            fs.mkdirSync(projectsFolder);
+            runningProjectConfigData = [{ baseUrl, 'active': true }];
+        }
+
+        if (runningProjectsConfig && !runningProject) {
+            const inactivatedRunningProjects = runningProjectsConfig.map(project => { return { ...project, active: false } });
+            runningProjectConfigData = inactivatedRunningProjects.push({ baseUrl, active: true });
+        }
+
+        if (runningProjectsConfig && runningProject) {
+            runningProjectConfigData = runningProjectsConfig.map(project => {
+                if (project.baseUrl === baseUrl) {
+                    return { ...project, active: true };
+                }
+
+                return { ...project, active: false };
+            });
+        }
+
+        fs.writeFileSync(runningProjectConfigFile, JSON.stringify(runningProjectConfigData), 'utf8');
+        return true;
+    } catch (error) {
+        console.log(error);
+        return false;
+    }
+}
+
 const createProject = (baseUrl, protocol, folderRestriction = null, pageLimit = 500, crawlingSpeed = 'fast') => {
     const firstUrlToCrawl = folderRestriction ? baseUrl + folderRestriction : baseUrl
     const projectConfig = { baseUrl, protocol, folderRestriction, pageLimit, crawlingSpeed };
     const projectName = getProjectName(baseUrl);
     const projectBaseData = getBaseDataObj(firstUrlToCrawl, protocol);
 
-    if (projectExists(baseUrl) || !projectName) {
+    if (projectExists(baseUrl) || !projectName || !setRunningProject(baseUrl)) {
         return false;
     }
 
@@ -90,5 +144,7 @@ module.exports = {
     createProject,
     getProjectName,
     getProjectConfig,
-    getProjectPredefinedConfigs
+    getProjectPredefinedConfigs,
+    getRunningProjectsConfig,
+    setRunningProject
 }
