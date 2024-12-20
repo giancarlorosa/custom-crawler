@@ -7,11 +7,11 @@ const chalk = require('chalk');
 const { boxedConfigMessage } = require('./src/utils');
 
 const baseUrl = 'https://www.domain.io';
-const subPage = '/locations';
+const subPage = 'null';
 const pagesToScrap = 5000;
 
 let pageList = [{
-    url: `${baseUrl}${subPage}`,
+    url: `${baseUrl}`,
     visited: false,
     statusCode: null,
     externalLink: false,
@@ -62,18 +62,20 @@ async function scrap(page){
         const pagePathname = pageUrlObg.pathname;
         let scrapPage = true;
 
-        if (pagePathname.length < subPage.length) {
-            scrapPage = false;
-        }
-
-        if (subPage.length === pagePathname.length && subPage !== pagePathname) {
-            scrapPage = false;
-        }
-
-        if (pagePathname.length > subPage.length) {
-            const pagePathNameComp = pagePathname.slice(0, subPage.length + 1);
-            if (pagePathNameComp !== `${subPage}/` && pagePathNameComp !== `${subPage}#` && pagePathNameComp !== `${subPage}?`) {
+        if (subPage) {
+            if (pagePathname.length < subPage.length) {
                 scrapPage = false;
+            }
+
+            if (subPage.length === pagePathname.length && subPage !== pagePathname) {
+                scrapPage = false;
+            }
+
+            if (pagePathname.length > subPage.length) {
+                const pagePathNameComp = pagePathname.slice(0, subPage.length + 1);
+                if (pagePathNameComp !== `${subPage}/` && pagePathNameComp !== `${subPage}#` && pagePathNameComp !== `${subPage}?`) {
+                    scrapPage = false;
+                }
             }
         }
 

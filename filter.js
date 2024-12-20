@@ -6,11 +6,12 @@ const { boxedConfigMessage } = require('./src/utils');
 const absolutePath = path.resolve(__dirname, 'scrap_result.json');
 const domain = 'https://www.domain.io'
 const subPage = 'locations';
-const urlSearch = `${domain}/${subPage}/services`;
+const urlSearch = `${domain}`;
 
-// const filterSelected = 'documentLinksWithError';
+const filterSelected = 'documentLinksWithError';
 // const filterSelected = 'pagesWithDocumentLinks';
-const filterSelected = 'pagesWithError';
+// const filterSelected = 'pagesWithError';
+// const filterSelected = 'externalLinksWithError';
 
 let pageList = JSON.parse(fs.readFileSync(absolutePath, { encoding: 'utf8' }));
 
@@ -24,12 +25,25 @@ function getPagesWithError() {
         'data': pageList.filter(page => {
             return page.statusCode !== 200
             && page.statusCode !== 301
-            && (
-                page.url.slice(0, urlSearch.length) === urlSearch
-                || page.responseUrl.slice(0, urlSearch.length) === urlSearch
-            )
+            && page.externalLink === false
+            && page.responseUrl.includes(domain)
+            // && (
+            //     page.url.slice(0, urlSearch.length) === urlSearch
+            //     || page.responseUrl.slice(0, urlSearch.length) === urlSearch
+            // )
         })
-};
+    };
+}
+
+function getExternalLinksWithError() {
+    return {
+        'filterTitle': 'External Links with Error',
+        'data': pageList.filter(page => {
+            return page.statusCode !== 200
+            && page.statusCode !== 301
+            && page.externalLink === true
+        })
+    };
 }
 
 function getPagesWithRedirect() {
@@ -59,8 +73,21 @@ function getPagesWithDocumentLinks() {
 function getDocumentLinksWithError() {
     return {
         'filterTitle': 'Document Links with Error',
-        'data': pageList.filter(page => page.documentLink === true && page.statusCode !== 200)
+        'data': pageList.filter(page => page.documentLink === true && page.statusCode !== 200 && page.statusCode !== 301)
     };
+}
+
+function exportData(data, fileName) {
+    // console.log(data);
+    // return
+
+    try {
+        fs.writeFileSync(`./exports/${fileName}`, data, 'utf8');
+        return true;
+    } catch (error) {
+        console.log(error)
+        return false;
+    }
 }
 
 // Default List filter
@@ -77,6 +104,9 @@ switch (filterSelected) {
     case 'pagesWithDocumentLinks':
         filterEnabled = getPagesWithDocumentLinks();
         break;
+    case 'externalLinksWithError':
+        filterEnabled = getExternalLinksWithError();
+        break;
     default:
         filterEnabled = {
             'filterTitle': 'Filters are disabled',
@@ -88,7 +118,14 @@ switch (filterSelected) {
 
 // Filter result data
 if (filterEnabled.data.length) {
+    const mappedData = filterEnabled.data.map(link => {
+        return `${link.responseUrl};${link.url};${link.statusCode}`
+    })
+
     console.log(filterEnabled.data);
+    // console.log(mappedData);
+
+    exportData(mappedData.join("\n"), `${filterEnabled.filterTitle}.csv`);
 }
 
 // Filter result stats
