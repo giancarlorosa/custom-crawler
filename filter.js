@@ -1,8 +1,17 @@
 const fs = require('node:fs');
 const path = require('path');
 const chalk = require('chalk');
+const { boxedConfigMessage } = require('./src/utils');
 
 const absolutePath = path.resolve(__dirname, 'scrap_result.json');
+const domain = 'https://www.domain.io'
+const subPage = 'locations';
+const urlSearch = `${domain}/${subPage}/services`;
+
+// const filterSelected = 'documentLinksWithError';
+// const filterSelected = 'pagesWithDocumentLinks';
+const filterSelected = 'pagesWithError';
+
 let pageList = JSON.parse(fs.readFileSync(absolutePath, { encoding: 'utf8' }));
 
 function getPageByUrl(url) {
@@ -10,15 +19,28 @@ function getPageByUrl(url) {
 }
 
 function getPagesWithError() {
-    return pageList.filter(page => page.statusCode !== 200 && page.statusCode !== 301);
+    return {
+        'filterTitle': 'Pages with Error',
+        'data': pageList.filter(page => {
+            return page.statusCode !== 200
+            && page.statusCode !== 301
+            && (
+                page.url.slice(0, urlSearch.length) === urlSearch
+                || page.responseUrl.slice(0, urlSearch.length) === urlSearch
+            )
+        })
+};
 }
 
 function getPagesWithRedirect() {
-    return pageList.filter(page => page.statusCode === 301);
+    return {
+        'filterTitle': 'Pages with Redirect',
+        'data': pageList.filter(page => page.statusCode === 301)
+    };
 }
 
 function getPagesWithDocumentLinks() {
-    const documentLinksObj = getDocumentLinks();
+    const documentLinksObj = getDocumentLinksWithError().data;
 
     if (documentLinksObj.length < 0) {
         return false;
@@ -28,19 +50,54 @@ function getPagesWithDocumentLinks() {
         return document.url;
     });
 
-    return pageList.filter(page => page.links.some(link => documentLinks.includes(link)));
+    return {
+        'filterTitle': 'Pages with Document links',
+        'data': pageList.filter(page => page.links.some(link => documentLinks.includes(link)))
+    };
 }
 
-function getDocumentLinks() {
-    return pageList.filter(page => page.documentLink === true && page.statusCode !== 200);
+function getDocumentLinksWithError() {
+    return {
+        'filterTitle': 'Document Links with Error',
+        'data': pageList.filter(page => page.documentLink === true && page.statusCode !== 200)
+    };
 }
 
-// ### Documents with error
-// console.log(getDocumentLinks());
-// console.log('Documents with problem:', chalk.black.bgYellowBright(`### ${getDocumentLinks().length} ###`));
+// Default List filter
+let filterEnabled = null;
 
-// ### Pages with error
-console.log(getPagesWithError());
-console.log('Pages with problem:', chalk.black.bgYellowBright(`### ${getPagesWithError().length} ###`));
+// List of filters
+switch (filterSelected) {
+    case 'pagesWithError':
+        filterEnabled = getPagesWithError();
+        break;
+    case 'documentLinksWithError':
+        filterEnabled = getDocumentLinksWithError();
+        break;
+    case 'pagesWithDocumentLinks':
+        filterEnabled = getPagesWithDocumentLinks();
+        break;
+    default:
+        filterEnabled = {
+            'filterTitle': 'Filters are disabled',
+            'data': []
+        }
+        break;
 
-console.log('Pages crawled:', chalk.black.bgGreenBright(`### ${pageList.length} ###`));
+}
+
+// Filter result data
+if (filterEnabled.data.length) {
+    console.log(filterEnabled.data);
+}
+
+// Filter result stats
+console.log(boxedConfigMessage(
+    `${filterEnabled.filterTitle} - results related`,
+    {
+        'Domain': domain,
+        'Search URL': urlSearch.replace(domain, ''),
+        'Items with problems': filterEnabled.data.length,
+        'Pages crawled': pageList.length
+    }
+));

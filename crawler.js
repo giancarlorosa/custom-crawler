@@ -4,9 +4,10 @@ const fs = require('node:fs');
 const url = require('node:url');
 const path = require('path');
 const chalk = require('chalk');
+const { boxedConfigMessage } = require('./src/utils');
 
 const baseUrl = 'https://www.domain.io';
-const subPage = '/folder';
+const subPage = '/locations';
 const pagesToScrap = 5000;
 
 let pageList = [{
@@ -203,7 +204,17 @@ async function scrap(page){
         scrap(getPageToScrap());
     } else {
         writeScrapResult(JSON.stringify(pageList))
-        console.log('Scraping process finished!');
+        console.log(boxedConfigMessage(
+            'the Scraping process has been completed',
+            {
+                'Domain': baseUrl,
+                'Search URL': subPage,
+                'Pages crawled': pageList.length
+            },
+            false,
+            true
+        ));
+
         process.exit();
     }
 }
