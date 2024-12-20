@@ -10,24 +10,71 @@ const {
     projectExists,
     getProjectName,
     getProjectPredefinedConfigs,
-    createProject
+    getRunningProjectsConfig,
+    createProject,
+    resetProject,
+    getProjectConfig,
+    setRunningProject
 } = require('./src/project_management.js');
+const { startCrawlingProcess, getCrawledLinks } = require('./src/crawler');
+
+// Constants
+const runningProjects = getRunningProjectsConfig() || [];
+const activeProject = runningProjects.filter(project => project.active === true)[0];
 
 const firstSteps = [
     {
-        type: 'select',
-        name: 'actionType',
-        message: 'What would you like to do:',
+        type: (prev, values) => runningProjects.length > 1 ? 'select' : null,
+        name: 'actionTypeRunningProjects',
+        message: 'What would you like to do?',
         choices: [
-            { title: 'Start a project', description: 'Configure a new project to run the crawling process.', value: 'start' },
-            { title: 'Resume website crawling', description: 'Resume the crawling process for an existing project.', value: 'resume' },
-            { title: 'Reset website crawling', description: 'Run a completely new crawling on an already created project.', value: 'reset' },
-            { title: 'Reconfigure project', description: 'Update the current configuration for an existing project.', value: 'config' },
-            { title: 'Filter data from a crawled website', value: 'filter' }
+            { title: 'Filter data', value: 'filter' },
+            { title: 'Resume website crawling', value: 'resume' },
+            { title: 'Reset website crawling', value: 'reset' },
+            { title: 'Reconfigure project', value: 'config' },
+            { title: 'Change project', value: 'change' },
+            { title: 'Create a new project', value: 'start' },
         ]
     },
     {
-        type: 'text',
+        type: (prev, values) => values.actionTypeRunningProjects === 'change' ? 'select' : null,
+        name: 'projectSelection',
+        message: 'What project you would like to work now?',
+        choices: runningProjects
+            .filter(project => project.active === false)
+            .map(project => {
+                return {title: project.baseUrl, value: project.baseUrl}
+            })
+    },
+    {
+        type: (prev, values) => values.projectSelection ? 'select' : null,
+        name: 'actionTypeRunningProjectSelected',
+        message: 'What would you like to do now?',
+        choices: [
+            { title: 'Filter data', value: 'filter' },
+            { title: 'Resume website crawling', value: 'resume' },
+            { title: 'Reset website crawling', value: 'reset' },
+            { title: 'Reconfigure project', value: 'config' },
+            { title: 'Cancel process', value: 'cancel' },
+        ],
+        initial: 3
+    },
+    {
+        type: (prev, values) => runningProjects.length < 2 ? 'select' : null,
+        name: 'actionType',
+        message: 'What would you like to do:',
+        choices: [
+            { title: 'Create a new project', description: 'Configure a new project to run the crawling process.', value: 'start' },
+            { title: 'Resume website crawling', description: 'Resume the crawling process for an existing project.', value: 'resume', disabled: runningProjects.length < 1 },
+            { title: 'Reset website crawling', description: 'Run a completely new crawling on an already created project.', value: 'reset', disabled: runningProjects.length < 1 },
+            { title: 'Reconfigure project', description: 'Update the current configuration for an existing project.', value: 'config', disabled: runningProjects.length < 1 },
+            { title: 'Remove project', description: 'Remove project from project list.', value: 'remove', disabled: runningProjects.length < 1 },
+            { title: 'Filter data', value: 'filter', disabled: runningProjects.length < 1 }
+        ],
+        initial: runningProjects.length > 0 ? 5 : 0
+    },
+    {
+        type:  (prev, values) => values.actionType === 'start' || values.actionTypeRunningProjects === 'start' ? 'text' : null,
         name: 'websiteBaseUrl',
         message: 'Inform the website BASE URL: ',
         validate: value => value.length < 10 || (value.slice(0, 7) !== 'http://' && value.slice(0, 8) !== 'https://') ? `Please, inform a correct website BASE URL (https://...)` : true
@@ -35,7 +82,7 @@ const firstSteps = [
     {
         type: (prev, values) => projectExists(values.websiteBaseUrl) ? 'select' : null,
         name: 'actionTypeProjectExists',
-        message: 'This project already exists. What would you like to do now:',
+        message: 'This project already exists. What would you like to do now?',
         choices: [
             { title: 'Resume website crawling', value: 'resume' },
             { title: 'Reset website crawling', value: 'reset' },
@@ -44,7 +91,7 @@ const firstSteps = [
         ]
     },
     {
-        type: (prev, values) => values.actionType === 'start' && !projectExists(values.websiteBaseUrl) ? 'select' : null,
+        type: (prev, values) => (values.actionType === 'start' || values.actionTypeRunningProjects === 'start') && !projectExists(values.websiteBaseUrl) ? 'select' : null,
         name: 'restrictedCrawling',
         message: 'Would you like to restrict your crawling process?',
         choices: [
@@ -59,7 +106,7 @@ const firstSteps = [
         validate: value => value.length < 2 || value.slice(0, 1) !== '/' ? 'Your folder can not be empty and must start with / (e.g. /locations)' : true
     },
     {
-        type: (prev, values) => values.actionType === 'start' && !projectExists(values.websiteBaseUrl) ? 'select' : null,
+        type: (prev, values) => (values.actionType === 'start' || values.actionTypeRunningProjects === 'start') && !projectExists(values.websiteBaseUrl) ? 'select' : null,
         name: 'configType',
         message: 'How would you like to configure your project?',
         choices: [
@@ -101,11 +148,61 @@ const confirmConfigSteps = [
     }
 ];
 
-(async () => {
-    const firstStepsResponse = await prompts(firstSteps);
-    console.log(firstStepsResponse);
+const confirmResetCrawling = [
+    {
+        type: 'confirm',
+        name: 'confirmReset',
+        message: "You are about to erase ALL the collected data from your project. Are you sure about this?"
+    },
+    {
+        type: (prev, values) => values.confirmReset === true ? 'confirm' : null,
+        name: 'startCrawling',
+        message: 'Would you like to start crawling process now?'
+    }
+]
 
-    if (firstStepsResponse.actionType === 'start' && !firstStepsResponse?.actionTypeProjectExists) {
+const confirmCrawlingStartSteps = [
+    {
+        type: 'confirm',
+        name: 'confirmStart',
+        message: 'Would you like to start crawling process now?'
+    }
+];
+
+(async () => {
+    if (runningProjects.length > 0) {
+        const projectConfig = getProjectConfig(activeProject.baseUrl);
+        const crawledLinks = getCrawledLinks(activeProject.baseUrl) || [];
+        let runningProjectFootnotes = [];
+
+        runningProjectFootnotes.push(chalk.bold.yellowBright('PROJECT STATUS:'))
+        runningProjectFootnotes.push(`Links found: ${chalk.greenBright(crawledLinks.length)}`)
+        runningProjectFootnotes.push(`Links tested: ${chalk.greenBright(crawledLinks.filter(link => link.visited === true).length)}`)
+
+        console.log(boxedConfigMessage(
+            'YOU ARE RUNNING THE FOLLOWING PROJECT RIGHT NOW',
+            {
+                'Base URL': projectConfig.baseUrl,
+                'Protocol': projectConfig.protocol.replace(':', ''),
+                'Folder restriction': projectConfig.folderRestriction || 'None',
+                'Crawling limit': projectConfig.pageLimit === 0 ? 'Unlimited' : projectConfig.pageLimit,
+                'Crawling speed': projectConfig.crawlingSpeed
+            },
+            runningProjectFootnotes.join("\n"),
+            true,
+            true
+        ));
+    }
+
+    const firstStepsResponse = await prompts(firstSteps);
+
+    if (firstStepsResponse.actionTypeRunningProjects === 'change') {
+        setRunningProject(firstStepsResponse.projectSelection);
+    }
+
+    // console.log(firstStepsResponse);
+
+    if ((firstStepsResponse.actionType === 'start' || firstStepsResponse.actionTypeRunningProjects === 'start') && !firstStepsResponse?.actionTypeProjectExists) {
         const projectBaseUrlObj = new URL(firstStepsResponse.websiteBaseUrl);
         const projectBaseUrlProtocol = projectBaseUrlObj.protocol;
         const projectName = getProjectName(firstStepsResponse.websiteBaseUrl);
@@ -168,7 +265,52 @@ const confirmConfigSteps = [
                     'type': 'success',
                     'marginTop': true
                 }
-            ))
+            ));
+
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            startCrawlingProcess();
+        }
+    }
+
+    if (firstStepsResponse.actionType === 'resume' || firstStepsResponse.actionTypeRunningProjects === 'resume' || firstStepsResponse.actionTypeRunningProjectSelected === 'resume') {
+        const confirmCrawlingStartResponse = await prompts(confirmCrawlingStartSteps);
+
+        if (confirmCrawlingStartResponse.confirmStart) {
+            console.log(boxedInfoMessage(
+                'resuming your crawling process',
+                "Now we will start the crawling process. \n You can cancel/pause this process any \n time and resume it in the future \n if necessary.",
+                false,
+                {
+                    'type': 'success',
+                    'marginTop': true
+                }
+            ));
+
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            startCrawlingProcess()
+        }
+    }
+
+    if (firstStepsResponse.actionType === 'reset' || firstStepsResponse.actionTypeRunningProjects === 'reset' || firstStepsResponse.actionTypeRunningProjectSelected === 'reset') {
+        const confirmResetCrawlingResponse = await prompts(confirmResetCrawling);
+
+        if (confirmResetCrawlingResponse.confirmReset) {
+            resetProject(activeProject.baseUrl);
+        }
+
+        if (confirmResetCrawlingResponse.startCrawling) {
+            console.log(boxedInfoMessage(
+                'crawling process successfully reset',
+                "Now we will start the crawling process. \n You can cancel/pause this process any \n time and resume it in the future \n if necessary.",
+                false,
+                {
+                    'type': 'success',
+                    'marginTop': true
+                }
+            ));
+
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            startCrawlingProcess()
         }
     }
 })();

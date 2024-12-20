@@ -4,7 +4,6 @@ const url = require('node:url');
 const path = require('path');
 
 // Custom modules
-const { getBaseDataObj } = require('./crawler');
 
 // Local constants
 const projectsFolder = './projects';
@@ -36,6 +35,20 @@ const getProjectPredefinedConfigs = (config) => {
     }
 
     return predefinedConfigs[config];
+}
+
+const getBaseDataObj = (url, protocol) => {
+    return {
+        'url': url,
+        'protocol': protocol,
+        'visited': false,
+        'statusCode': null,
+        'externalLink': false,
+        'documentLink': null,
+        'absoluteLink': false,
+        'pageAnchor': null,
+        'links': []
+    }
 }
 
 const getProjectConfig = (baseUrl) => {
@@ -91,7 +104,7 @@ const setRunningProject = (baseUrl) => {
 
         if (runningProjectsConfig && !runningProject) {
             const inactivatedRunningProjects = runningProjectsConfig.map(project => { return { ...project, active: false } });
-            runningProjectConfigData = inactivatedRunningProjects.push({ baseUrl, active: true });
+            runningProjectConfigData = [...inactivatedRunningProjects, { baseUrl, active: true }];
         }
 
         if (runningProjectsConfig && runningProject) {
@@ -107,7 +120,6 @@ const setRunningProject = (baseUrl) => {
         fs.writeFileSync(runningProjectConfigFile, JSON.stringify(runningProjectConfigData), 'utf8');
         return true;
     } catch (error) {
-        console.log(error);
         return false;
     }
 }
@@ -137,14 +149,36 @@ const createProject = (baseUrl, protocol, folderRestriction = null, pageLimit = 
     }
 }
 
+const resetProject = (baseUrl) => {
+    const projectConfig = getProjectConfig(baseUrl);
+    const projectName = getProjectName(baseUrl);
+
+    if (!projectConfig) {
+        return false;
+    }
+
+    const projectBaseUrl = new URL(projectConfig.baseUrl);
+    const firstUrlToCrawl = projectConfig.folderRestriction ? baseUrl + projectConfig.folderRestriction : baseUrl;
+    projectBaseData = getBaseDataObj(firstUrlToCrawl, projectBaseUrl.protocol);
+
+    try {
+        fs.writeFileSync(`${projectsFolder}/${projectName}/data.json`, JSON.stringify([projectBaseData]), 'utf8');
+        return true;
+    } catch (error) {
+        return false;
+    }
+}
+
 module.exports = {
     projectsFolder,
     exportsFolder,
     projectExists,
     createProject,
+    resetProject,
     getProjectName,
     getProjectConfig,
     getProjectPredefinedConfigs,
+    getBaseDataObj,
     getRunningProjectsConfig,
     setRunningProject
 }
