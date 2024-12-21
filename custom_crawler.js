@@ -21,6 +21,8 @@ const { startCrawlingProcess, getCrawledLinks } = require('./src/crawler');
 // Constants
 const runningProjects = getRunningProjectsConfig() || [];
 const activeProject = runningProjects.filter(project => project.active === true)[0];
+const projectConfig = getProjectConfig(activeProject.baseUrl);
+const crawledLinks = getCrawledLinks(activeProject.baseUrl) || [];
 
 const firstSteps = [
     {
@@ -28,13 +30,14 @@ const firstSteps = [
         name: 'actionTypeRunningProjects',
         message: 'What would you like to do?',
         choices: [
-            { title: 'Filter data', value: 'filter' },
-            { title: 'Resume website crawling', value: 'resume' },
-            { title: 'Reset website crawling', value: 'reset' },
+            { title: 'Filter data', value: 'filter', disabled: crawledLinks.length === 1 },
+            { title: `${crawledLinks.length === 1 ? 'Start' : 'Resume'} website crawling`, value: 'resume' },
+            { title: 'Reset website crawling', value: 'reset', disabled: crawledLinks.length === 1 },
             { title: 'Reconfigure project', value: 'config' },
             { title: 'Change project', value: 'change' },
             { title: 'Create a new project', value: 'start' },
-        ]
+        ],
+        initial: crawledLinks.length > 1 ? 0 : 1
     },
     {
         type: (prev, values) => values.actionTypeRunningProjects === 'change' ? 'select' : null,
@@ -51,13 +54,13 @@ const firstSteps = [
         name: 'actionTypeRunningProjectSelected',
         message: 'What would you like to do now?',
         choices: [
-            { title: 'Filter data', value: 'filter' },
-            { title: 'Resume website crawling', value: 'resume' },
-            { title: 'Reset website crawling', value: 'reset' },
+            { title: 'Filter data', value: 'filter', disabled: crawledLinks.length === 1  },
+            { title: `${crawledLinks.length === 1 ? 'Start' : 'Resume'} website crawling`, value: 'resume' },
+            { title: 'Reset website crawling', value: 'reset', disabled: crawledLinks.length === 1 },
             { title: 'Reconfigure project', value: 'config' },
             { title: 'Cancel process', value: 'cancel' },
         ],
-        initial: 3
+        initial: crawledLinks.length > 1 ? 0 : 1
     },
     {
         type: (prev, values) => runningProjects.length < 2 ? 'select' : null,
@@ -171,8 +174,6 @@ const confirmCrawlingStartSteps = [
 
 (async () => {
     if (runningProjects.length > 0) {
-        const projectConfig = getProjectConfig(activeProject.baseUrl);
-        const crawledLinks = getCrawledLinks(activeProject.baseUrl) || [];
         let runningProjectFootnotes = [];
 
         runningProjectFootnotes.push(chalk.bold.yellowBright('PROJECT STATUS:'))
@@ -277,7 +278,7 @@ const confirmCrawlingStartSteps = [
 
         if (confirmCrawlingStartResponse.confirmStart) {
             console.log(boxedInfoMessage(
-                'resuming your crawling process',
+                `${crawledLinks.length === 1 ? 'Starting' : 'Resuming'} your crawling process`,
                 "Now we will start the crawling process. \n You can cancel/pause this process any \n time and resume it in the future \n if necessary.",
                 false,
                 {
