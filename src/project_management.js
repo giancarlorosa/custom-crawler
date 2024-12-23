@@ -1,4 +1,5 @@
 // Default requires
+const chalk = require('chalk');
 const fs = require('node:fs');
 const url = require('node:url');
 const path = require('path');
@@ -14,7 +15,7 @@ const getRunningProjectsConfig = () => {
         const runningProjectsConfig = fs.readFileSync(`${projectsFolder}/config.json`, 'utf8');
         return JSON.parse(runningProjectsConfig);
     } catch (error) {
-        return false;
+        return [];
     }
 }
 
@@ -37,17 +38,19 @@ const getProjectPredefinedConfigs = (config) => {
     return predefinedConfigs[config];
 }
 
-const getBaseDataObj = (url, protocol) => {
+const getBaseDataObj = (url) => {
     return {
         'url': url,
-        'protocol': protocol,
+        'responseUrl': null,
+        'protocol': null,
         'visited': false,
         'statusCode': null,
         'externalLink': false,
-        'documentLink': null,
+        'documentLink': false,
         'absoluteLink': false,
-        'pageAnchor': null,
-        'links': []
+        'pageAnchor': false,
+        'missingAnchor': false,
+        'links': [],
     }
 }
 
@@ -70,7 +73,24 @@ const getProjectName = (baseUrl) => {
     }
 }
 
-const projectExists = (baseUrl) => {
+const getActiveProject = () => {
+    const runningProjectsConfig = getRunningProjectsConfig();
+
+    if (!runningProjectsConfig) {
+        return false;
+    }
+
+    const activeProject = runningProjectsConfig.filter(project => project.active === true)[0];
+
+    if (!activeProject || !getProjectConfig(activeProject?.baseUrl)) {
+        setRunningProject(runningProjectsConfig[0].baseUrl);
+        return runningProjectsConfig[0];
+    }
+
+    return activeProject;
+}
+
+function projectExists (baseUrl) {
     const projectConfig = getProjectConfig(baseUrl);
 
     if (!projectConfig || projectConfig.baseUrl !== baseUrl) {
@@ -80,7 +100,7 @@ const projectExists = (baseUrl) => {
     return true;
 }
 
-const runningProjectExists = (baseUrl) => {
+function runningProjectExists (baseUrl) {
     const runningProjectsConfig = getRunningProjectsConfig();
 
     if (!runningProjectsConfig) {
@@ -90,30 +110,37 @@ const runningProjectExists = (baseUrl) => {
     return runningProjectsConfig.filter(project => project.baseUrl === baseUrl).length > 0;
 }
 
-const setRunningProject = (baseUrl) => {
+function setRunningProject(baseUrl) {
     const runningProjectsConfig = getRunningProjectsConfig();
     const runningProject = runningProjectExists(baseUrl);
     const runningProjectConfigFile = `${projectsFolder}/config.json`;
+    const runningProjectConfigBaseData = { baseUrl, 'active': true, 'disabled': false };
     let runningProjectConfigData = [];
 
     try {
         if (!runningProjectsConfig) {
             fs.mkdirSync(projectsFolder);
-            runningProjectConfigData = [{ baseUrl, 'active': true }];
+            runningProjectConfigData = [runningProjectConfigBaseData];
         }
 
         if (runningProjectsConfig && !runningProject) {
-            const inactivatedRunningProjects = runningProjectsConfig.map(project => { return { ...project, active: false } });
-            runningProjectConfigData = [...inactivatedRunningProjects, { baseUrl, active: true }];
+            const inactivatedRunningProjects = runningProjectsConfig.map(project => { return { ...project, active: false, disabled: !projectExists(project.baseUrl) } });
+            runningProjectConfigData = [...inactivatedRunningProjects, { baseUrl, active: true, disabled: !projectExists(baseUrl) }];
+
+            if (!baseUrl) {
+                runningProjectConfigData = runningProjectsConfig;
+            }
         }
 
         if (runningProjectsConfig && runningProject) {
             runningProjectConfigData = runningProjectsConfig.map(project => {
+                const disabled = !projectExists(project.baseUrl);
+
                 if (project.baseUrl === baseUrl) {
-                    return { ...project, active: true };
+                    return { ...project, active: true, disabled };
                 }
 
-                return { ...project, active: false };
+                return { ...project, active: false, disabled };
             });
         }
 
@@ -125,13 +152,29 @@ const setRunningProject = (baseUrl) => {
 }
 
 const createProject = (baseUrl, protocol, folderRestriction = null, pageLimit = 500, crawlingSpeed = 'fast') => {
-    const firstUrlToCrawl = folderRestriction ? baseUrl + folderRestriction : baseUrl
     const projectConfig = { baseUrl, protocol, folderRestriction, pageLimit, crawlingSpeed };
     const projectName = getProjectName(baseUrl);
-    const projectBaseData = getBaseDataObj(firstUrlToCrawl, protocol);
+
+    // Always start at home page.
+    let projectBaseData = [getBaseDataObj(baseUrl)];
 
     if (projectExists(baseUrl) || !projectName || !setRunningProject(baseUrl)) {
         return false;
+    }
+
+    if (folderRestriction && typeof folderRestriction === 'string' && folderRestriction.slice(0, 1) !== '!') {
+        projectBaseData.push(getBaseDataObj(baseUrl + folderRestriction.replace('/*', '')));
+    }
+
+    if (folderRestriction && Array.isArray(folderRestriction)) {
+        folderRestriction.forEach(restriction => {
+            const restrictionFolder = restriction.trim().replace('/*', '');
+            const restrictionExists = projectBaseData.filter(project => project.url === baseUrl + restrictionFolder).length > 0;
+
+            if (restrictionFolder.slice(0, 1) !== '!' && !restrictionExists) {
+                projectBaseData.push(getBaseDataObj(baseUrl + restrictionFolder));
+            }
+        });
     }
 
     const newProjectFolder = `${projectsFolder}/${projectName}`;
@@ -141,7 +184,7 @@ const createProject = (baseUrl, protocol, folderRestriction = null, pageLimit = 
     try {
         fs.mkdirSync(newProjectFolder);
         fs.writeFileSync(newProjectConfigFile, JSON.stringify(projectConfig), 'utf8');
-        fs.writeFileSync(newProjectDataFile, JSON.stringify([projectBaseData]), 'utf8');
+        fs.writeFileSync(newProjectDataFile, JSON.stringify(projectBaseData), 'utf8');
 
         return true;
     } catch (error) {
@@ -159,7 +202,7 @@ const resetProject = (baseUrl) => {
 
     const projectBaseUrl = new URL(projectConfig.baseUrl);
     const firstUrlToCrawl = projectConfig.folderRestriction ? baseUrl + projectConfig.folderRestriction : baseUrl;
-    projectBaseData = getBaseDataObj(firstUrlToCrawl, projectBaseUrl.protocol);
+    projectBaseData = getBaseDataObj(firstUrlToCrawl);
 
     try {
         fs.writeFileSync(`${projectsFolder}/${projectName}/data.json`, JSON.stringify([projectBaseData]), 'utf8');
@@ -180,5 +223,6 @@ module.exports = {
     getProjectPredefinedConfigs,
     getBaseDataObj,
     getRunningProjectsConfig,
+    getActiveProject,
     setRunningProject
 }

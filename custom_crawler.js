@@ -11,6 +11,7 @@ const {
     getProjectName,
     getProjectPredefinedConfigs,
     getRunningProjectsConfig,
+    getActiveProject,
     createProject,
     resetProject,
     getProjectConfig,
@@ -19,14 +20,35 @@ const {
 const { startCrawlingProcess, getCrawledLinks } = require('./src/crawler');
 
 // Constants
-const runningProjects = getRunningProjectsConfig() || [];
-const activeProject = runningProjects.filter(project => project.active === true)[0];
+const activeProject = getActiveProject();
 const projectConfig = getProjectConfig(activeProject.baseUrl);
 const crawledLinks = getCrawledLinks(activeProject.baseUrl) || [];
 
+let projectConfigDisplay = projectConfig;
+if (projectConfig.folderRestriction && typeof projectConfig.folderRestriction === 'object') {
+    const folderRestrictions = projectConfig.folderRestriction;
+    let folderRestrictionsObj = {};
+
+    // Remove older folder restrictions
+    delete projectConfigDisplay.folderRestriction;
+
+    for (let i = 1; i <= folderRestrictions.length; i++) {
+        folderRestrictionsObj[`Folder restriction ${i}`] = folderRestrictions[i - 1];
+    }
+
+    projectConfigDisplay = {
+        'Base URL': projectConfig.baseUrl,
+        'Protocol': projectConfig.protocol.replace(':', ''),
+        'Crawling limit': projectConfig.pageLimit === 0 ? 'Unlimited' : projectConfig.pageLimit,
+        'Crawling speed': projectConfig.crawlingSpeed,
+        'Folder restrictions rules': folderRestrictions.length,
+        ...folderRestrictionsObj
+    }
+}
+
 const firstSteps = [
     {
-        type: (prev, values) => runningProjects.length > 1 ? 'select' : null,
+        type: (prev, values) => getRunningProjectsConfig().length > 1 ? 'select' : null,
         name: 'actionTypeRunningProjects',
         message: 'What would you like to do?',
         choices: [
@@ -43,10 +65,10 @@ const firstSteps = [
         type: (prev, values) => values.actionTypeRunningProjects === 'change' ? 'select' : null,
         name: 'projectSelection',
         message: 'What project you would like to work now?',
-        choices: runningProjects
+        choices: getRunningProjectsConfig()
             .filter(project => project.active === false)
             .map(project => {
-                return {title: project.baseUrl, value: project.baseUrl}
+                return {title: project.baseUrl, value: project.baseUrl, disabled: project.disabled}
             })
     },
     {
@@ -63,18 +85,18 @@ const firstSteps = [
         initial: crawledLinks.length > 1 ? 0 : 1
     },
     {
-        type: (prev, values) => runningProjects.length < 2 ? 'select' : null,
+        type: (prev, values) => getRunningProjectsConfig().length < 2 ? 'select' : null,
         name: 'actionType',
         message: 'What would you like to do:',
         choices: [
             { title: 'Create a new project', description: 'Configure a new project to run the crawling process.', value: 'start' },
-            { title: 'Resume website crawling', description: 'Resume the crawling process for an existing project.', value: 'resume', disabled: runningProjects.length < 1 },
-            { title: 'Reset website crawling', description: 'Run a completely new crawling on an already created project.', value: 'reset', disabled: runningProjects.length < 1 },
-            { title: 'Reconfigure project', description: 'Update the current configuration for an existing project.', value: 'config', disabled: runningProjects.length < 1 },
-            { title: 'Remove project', description: 'Remove project from project list.', value: 'remove', disabled: runningProjects.length < 1 },
-            { title: 'Filter data', value: 'filter', disabled: runningProjects.length < 1 }
+            { title: 'Resume website crawling', description: 'Resume the crawling process for an existing project.', value: 'resume', disabled: getRunningProjectsConfig().length < 1 },
+            { title: 'Reset website crawling', description: 'Run a completely new crawling on an already created project.', value: 'reset', disabled: getRunningProjectsConfig().length < 1 },
+            { title: 'Reconfigure project', description: 'Update the current configuration for an existing project.', value: 'config', disabled: getRunningProjectsConfig().length < 1 },
+            { title: 'Remove project', description: 'Remove project from project list.', value: 'remove', disabled: getRunningProjectsConfig().length < 1 },
+            { title: 'Filter data', value: 'filter', disabled: getRunningProjectsConfig().length < 1 }
         ],
-        initial: runningProjects.length > 0 ? 5 : 0
+        initial: getRunningProjectsConfig().length > 0 ? 5 : 0
     },
     {
         type:  (prev, values) => values.actionType === 'start' || values.actionTypeRunningProjects === 'start' ? 'text' : null,
@@ -105,8 +127,8 @@ const firstSteps = [
     {
         type: (prev, values) => values.restrictedCrawling === 'yes' ? 'text' : null,
         name: 'restrictedCrawlingFolder',
-        message: 'Inform the folder to restrict your crawling process: ',
-        validate: value => value.length < 2 || value.slice(0, 1) !== '/' ? 'Your folder can not be empty and must start with / (e.g. /locations)' : true
+        message: 'Inform the folder to restrict your crawling process: (For more than one rule, use comma)',
+        validate: value => value.length < 2 || (value.slice(0, 1) !== '/' && value.slice(0, 2) !== '!/') ? 'Your folder can not be empty and must start with / (e.g. /locations)' : true
     },
     {
         type: (prev, values) => (values.actionType === 'start' || values.actionTypeRunningProjects === 'start') && !projectExists(values.websiteBaseUrl) ? 'select' : null,
@@ -173,7 +195,7 @@ const confirmCrawlingStartSteps = [
 ];
 
 (async () => {
-    if (runningProjects.length > 0) {
+    if (getRunningProjectsConfig().length > 0) {
         let runningProjectFootnotes = [];
 
         runningProjectFootnotes.push(chalk.bold.yellowBright('PROJECT STATUS:'))
@@ -182,13 +204,7 @@ const confirmCrawlingStartSteps = [
 
         console.log(boxedConfigMessage(
             'YOU ARE RUNNING THE FOLLOWING PROJECT RIGHT NOW',
-            {
-                'Base URL': projectConfig.baseUrl,
-                'Protocol': projectConfig.protocol.replace(':', ''),
-                'Folder restriction': projectConfig.folderRestriction || 'None',
-                'Crawling limit': projectConfig.pageLimit === 0 ? 'Unlimited' : projectConfig.pageLimit,
-                'Crawling speed': projectConfig.crawlingSpeed
-            },
+            projectConfigDisplay,
             runningProjectFootnotes.join("\n"),
             true,
             true
@@ -204,30 +220,52 @@ const confirmCrawlingStartSteps = [
     // console.log(firstStepsResponse);
 
     if ((firstStepsResponse.actionType === 'start' || firstStepsResponse.actionTypeRunningProjects === 'start') && !firstStepsResponse?.actionTypeProjectExists) {
+        if (!firstStepsResponse?.websiteBaseUrl) {
+            return false;
+        }
+
         const projectBaseUrlObj = new URL(firstStepsResponse.websiteBaseUrl);
         const projectBaseUrlProtocol = projectBaseUrlObj.protocol;
         const projectName = getProjectName(firstStepsResponse.websiteBaseUrl);
         const crawlingRestriction = firstStepsResponse.restrictedCrawling === 'yes' ? firstStepsResponse.restrictedCrawlingFolder : 'None';
+        const crawlingRestrictionRules = crawlingRestriction ? crawlingRestriction.split(',') : null;
         const pageLimit = firstStepsResponse.configType === 'manual' ? firstStepsResponse.configScrapLimit : getProjectPredefinedConfigs(firstStepsResponse.configType)?.pageLimit;
         const crawlingSpeed = firstStepsResponse.configType === 'manual' ? firstStepsResponse.configScrapSpeed : getProjectPredefinedConfigs(firstStepsResponse.configType)?.crawlingSpeed;
 
         let footerNote = [];
         let newProject = false;
+        let crawlingRestrictionRulesObj = {};
 
         footerNote.push(`${chalk.black.bgYellow('NOTE:')} You will be able to update or`);
         footerNote.push('change these configurations by editing');
         footerNote.push('the project config file at:');
         footerNote.push(chalk.bold(`${projectsFolder}/${projectName}`));
 
+        let projectConfigDisplayOnCreation = {
+            'Base URL': firstStepsResponse.baseUrl,
+            'Protocol': projectBaseUrlProtocol.replace(':', ''),
+            'Folder restriction': firstStepsResponse.restrictedCrawlingFolder,
+            'Crawling limit': pageLimit === 0 ? 'Unlimited' : pageLimit,
+            'Crawling speed': crawlingSpeed
+        }
+
+        if (crawlingRestrictionRules && crawlingRestrictionRules.length > 1) {
+            for (let i = 1; i <= crawlingRestrictionRules.length; i++) {
+                crawlingRestrictionRulesObj[`Folder restriction ${i}`] = crawlingRestrictionRules[i - 1].trim();
+            }
+
+            delete projectConfigDisplayOnCreation['Folder restriction'];
+
+            projectConfigDisplayOnCreation = {
+                ...projectConfigDisplayOnCreation,
+                'Folder restriction rules': crawlingRestrictionRules.length,
+                ...crawlingRestrictionRulesObj
+            }
+        }
+
         console.log(boxedConfigMessage(
             'THIS IS YOUR CURRENT PROJECT CONFIGURATION',
-            {
-                'Base URL': firstStepsResponse.websiteBaseUrl,
-                'Protocol': projectBaseUrlProtocol.replace(':', ''),
-                'Folder restriction': crawlingRestriction,
-                'Crawling limit': pageLimit === 0 ? 'Unlimited' : pageLimit,
-                'Crawling speed': crawlingSpeed
-            },
+            projectConfigDisplayOnCreation,
             footerNote.join("\n"),
             true
         ));
@@ -239,7 +277,7 @@ const confirmCrawlingStartSteps = [
             newProject = createProject(
                 firstStepsResponse.websiteBaseUrl,
                 projectBaseUrlProtocol,
-                crawlingRestriction === 'None' ? null : crawlingRestriction,
+                crawlingRestriction === 'None' ? null : crawlingRestrictionRules.length > 1 ? crawlingRestrictionRules : crawlingRestriction,
                 pageLimit,
                 crawlingSpeed
             )
@@ -269,7 +307,7 @@ const confirmCrawlingStartSteps = [
             ));
 
             await new Promise(resolve => setTimeout(resolve, 3000));
-            startCrawlingProcess();
+            startCrawlingProcess(firstStepsResponse.websiteBaseUrl);
         }
     }
 
@@ -288,7 +326,7 @@ const confirmCrawlingStartSteps = [
             ));
 
             await new Promise(resolve => setTimeout(resolve, 3000));
-            startCrawlingProcess()
+            startCrawlingProcess(activeProject.baseUrl)
         }
     }
 
@@ -311,7 +349,7 @@ const confirmCrawlingStartSteps = [
             ));
 
             await new Promise(resolve => setTimeout(resolve, 3000));
-            startCrawlingProcess()
+            startCrawlingProcess(activeProject.baseUrl)
         }
     }
 })();
