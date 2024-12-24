@@ -73,6 +73,28 @@ const getProjectName = (baseUrl) => {
     }
 }
 
+function getProjectBaseListToCraw(baseUrl, folderRestriction) {
+    // Always start at home page.
+    let projectBaseData = [getBaseDataObj(baseUrl)];
+
+    if (folderRestriction && typeof folderRestriction === 'string' && folderRestriction.slice(0, 1) !== '!') {
+        projectBaseData.push(getBaseDataObj(baseUrl + folderRestriction.replace('/*', '')));
+    }
+
+    if (folderRestriction && Array.isArray(folderRestriction)) {
+        folderRestriction.forEach(restriction => {
+            const restrictionFolder = restriction.trim().replace('/*', '');
+            const restrictionExists = projectBaseData.filter(project => project.url === baseUrl + restrictionFolder).length > 0;
+
+            if (restrictionFolder.slice(0, 1) !== '!' && !restrictionExists) {
+                projectBaseData.push(getBaseDataObj(baseUrl + restrictionFolder));
+            }
+        });
+    }
+
+    return projectBaseData;
+}
+
 const getActiveProject = () => {
     const runningProjectsConfig = getRunningProjectsConfig();
 
@@ -154,27 +176,10 @@ function setRunningProject(baseUrl) {
 const createProject = (baseUrl, protocol, folderRestriction = null, pageLimit = 500, crawlingSpeed = 'fast') => {
     const projectConfig = { baseUrl, protocol, folderRestriction, pageLimit, crawlingSpeed };
     const projectName = getProjectName(baseUrl);
-
-    // Always start at home page.
-    let projectBaseData = [getBaseDataObj(baseUrl)];
+    const projectBaseData = getProjectBaseListToCraw(baseUrl, folderRestriction);
 
     if (projectExists(baseUrl) || !projectName || !setRunningProject(baseUrl)) {
         return false;
-    }
-
-    if (folderRestriction && typeof folderRestriction === 'string' && folderRestriction.slice(0, 1) !== '!') {
-        projectBaseData.push(getBaseDataObj(baseUrl + folderRestriction.replace('/*', '')));
-    }
-
-    if (folderRestriction && Array.isArray(folderRestriction)) {
-        folderRestriction.forEach(restriction => {
-            const restrictionFolder = restriction.trim().replace('/*', '');
-            const restrictionExists = projectBaseData.filter(project => project.url === baseUrl + restrictionFolder).length > 0;
-
-            if (restrictionFolder.slice(0, 1) !== '!' && !restrictionExists) {
-                projectBaseData.push(getBaseDataObj(baseUrl + restrictionFolder));
-            }
-        });
     }
 
     const newProjectFolder = `${projectsFolder}/${projectName}`;
@@ -200,12 +205,10 @@ const resetProject = (baseUrl) => {
         return false;
     }
 
-    const projectBaseUrl = new URL(projectConfig.baseUrl);
-    const firstUrlToCrawl = projectConfig.folderRestriction ? baseUrl + projectConfig.folderRestriction : baseUrl;
-    projectBaseData = getBaseDataObj(firstUrlToCrawl);
+    const projectBaseData = getProjectBaseListToCraw(baseUrl, projectConfig.folderRestriction);
 
     try {
-        fs.writeFileSync(`${projectsFolder}/${projectName}/data.json`, JSON.stringify([projectBaseData]), 'utf8');
+        fs.writeFileSync(`${projectsFolder}/${projectName}/data.json`, JSON.stringify(projectBaseData), 'utf8');
         return true;
     } catch (error) {
         return false;
