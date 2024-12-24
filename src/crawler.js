@@ -95,6 +95,10 @@ const isRestrictedLink = (pathname, baseUrl) => {
 }
 
 const getValidUrl = (url, urlOrigin, baseUrl) => {
+    if (!url || !urlOrigin || !baseUrl) {
+        return false;
+    }
+
     const urlFirstCharacter = url.slice(0, 1);
     const urlProtocol = url.slice(0, 4);
 
@@ -160,8 +164,12 @@ const startCrawlingProcess = async (baseUrl) => {
     const baseUrlObj = new URL(baseUrl);
     const linkList = getCrawledLinks(baseUrl);
     const linkToCrawl = getLinkToCrawl(baseUrl);
+    const urlObj = linkToCrawl ? new URL(linkToCrawl.url) : null;
 
     if (!projectConfig || !linkToCrawl) {
+        console.log("\n");
+        console.log(chalk.black.bgCyanBright('No URLs to crawl!'));
+        console.log('If you want to crawl this project again, please, reset the project and start the crawling process again!');
         return false;
     }
 
@@ -174,7 +182,6 @@ const startCrawlingProcess = async (baseUrl) => {
         // Constants
         const response = await axios.get(linkToCrawl.url);
         const responseUrl = response?.request.res.responseUrl || null;
-        const urlObj = new URL(linkToCrawl.url);
         const responseUrlObj = responseUrl ? new URL(responseUrl) : null;
 
         // Link Checks
@@ -283,7 +290,26 @@ const startCrawlingProcess = async (baseUrl) => {
             console.log('Crawled links:', getCrawledLinks(baseUrl).length);
         }
     } catch (error) {
-        console.log(chalk.white.bgRed('ERROR:'), error);
+        // console.log(chalk.white.bgRed('ERROR:'), error);
+        console.log('-----------------------');
+        console.log(chalk.redBright('Link with error:'), error.config.url);
+        console.log('-----------------------');
+
+        const updatedLinkList = linkList.map(link => {
+            if (link.url === error.config.url) {
+                return {
+                    ...getBaseDataObj(error.config.url),
+                    responseUrl: error.request.res.responseUrl,
+                    protocol: error.request.protocol,
+                    visited: true,
+                    statusCode: error.status
+                }
+            }
+
+            return link;
+        });
+
+        storeLinkList(baseUrl, updatedLinkList);
 
         if (getLinkToCrawl(baseUrl)) {
             console.log(chalk.cyanBright('Looking for a new url to Crawl'));
