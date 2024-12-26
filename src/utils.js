@@ -2,6 +2,10 @@
 const box = require("cli-box");
 const chalk = require("chalk");
 
+const getSessionId = () => {
+    return Date.now();
+}
+
 const boxedMessage = (message, config) => {
     const boxedMessage = box(config?.size || "30x5", {
         text: message,
@@ -102,4 +106,9 @@ const boxedConfigMessage = (title, configs, footerNote = null, marginTop = false
     );
 }
 
-module.exports = { boxedMessage, boxedInfoMessage, boxedConfigMessage }
+module.exports = {
+    boxedMessage,
+    boxedInfoMessage,
+    boxedConfigMessage,
+    getSessionId
+}

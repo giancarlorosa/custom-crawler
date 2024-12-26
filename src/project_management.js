@@ -95,11 +95,20 @@ function getProjectBaseListToCraw(baseUrl, folderRestriction) {
     return projectBaseData;
 }
 
-const getActiveProject = () => {
-    const runningProjectsConfig = getRunningProjectsConfig();
+const getActiveProject = (sessionId) => {
+    let runningProjectsConfig = getRunningProjectsConfig();
 
-    if (!runningProjectsConfig) {
+    if (!runningProjectsConfig || !sessionId) {
         return false;
+    }
+
+    const projectsWithError = runningProjectsConfig.filter(project => {
+        return project.sessionId && project.sessionId !== sessionId;
+    });
+
+    if (projectsWithError && projectsWithError.length > 0) {
+        projectsWithError.forEach(project => removeRunningProject(project.baseUrl));
+        runningProjectsConfig = getRunningProjectsConfig();
     }
 
     const activeProject = runningProjectsConfig.filter(project => project.active === true)[0];
@@ -132,11 +141,30 @@ function runningProjectExists (baseUrl) {
     return runningProjectsConfig.filter(project => project.baseUrl === baseUrl).length > 0;
 }
 
-function setRunningProject(baseUrl) {
+function removeRunningProject(baseUrl) {
+    const runningProjectsConfig = getRunningProjectsConfig();
+    const hasRunningProject = runningProjectExists(baseUrl);
+    const runningProjectConfigFile = `${projectsFolder}/config.json`;
+
+    try {
+        if (!runningProjectsConfig || !hasRunningProject) {
+            return false;
+        }
+
+        const runningProjectConfigData = runningProjectsConfig.filter(project => project.baseUrl !== baseUrl);
+
+        fs.writeFileSync(runningProjectConfigFile, JSON.stringify(runningProjectConfigData), 'utf8');
+        return true;
+    } catch (error) {
+        return false;
+    }
+}
+
+function setRunningProject(baseUrl, sessionId = false) {
     const runningProjectsConfig = getRunningProjectsConfig();
     const runningProject = runningProjectExists(baseUrl);
     const runningProjectConfigFile = `${projectsFolder}/config.json`;
-    const runningProjectConfigBaseData = { baseUrl, 'active': true, 'disabled': false };
+    const runningProjectConfigBaseData = { baseUrl, 'active': true, sessionId };
     let runningProjectConfigData = [];
 
     try {
@@ -146,8 +174,8 @@ function setRunningProject(baseUrl) {
         }
 
         if (runningProjectsConfig && !runningProject) {
-            const inactivatedRunningProjects = runningProjectsConfig.map(project => { return { ...project, active: false, disabled: !projectExists(project.baseUrl) } });
-            runningProjectConfigData = [...inactivatedRunningProjects, { baseUrl, active: true, disabled: !projectExists(baseUrl) }];
+            const inactivatedRunningProjects = runningProjectsConfig.map(project => { return { ...project, active: false, sessionId: !projectExists(project.baseUrl) } });
+            runningProjectConfigData = [...inactivatedRunningProjects, { baseUrl, active: true, sessionId: !projectExists(baseUrl) }];
 
             if (!baseUrl) {
                 runningProjectConfigData = runningProjectsConfig;
@@ -156,13 +184,13 @@ function setRunningProject(baseUrl) {
 
         if (runningProjectsConfig && runningProject) {
             runningProjectConfigData = runningProjectsConfig.map(project => {
-                const disabled = !projectExists(project.baseUrl);
+                const sessionId = !projectExists(project.baseUrl);
 
                 if (project.baseUrl === baseUrl) {
-                    return { ...project, active: true, disabled };
+                    return { ...project, active: true, sessionId };
                 }
 
-                return { ...project, active: false, disabled };
+                return { ...project, active: false, sessionId };
             });
         }
 
