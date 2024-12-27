@@ -13,7 +13,8 @@ const {
     setRunningProject,
     createProject,
     updateProjectConfig,
-    removeRunningProject
+    removeRunningProject,
+    resetProject
 } = require('./project_management');
 const {
     getSessionId,
@@ -255,6 +256,8 @@ async function firstStep(configType = null) {
             return runCrawlingProcessStep();
         case 'cancel':
             return;
+        case 'reset':
+            return resetProjectDataStep();
         default:
             return firstStepResult;
     }
@@ -311,6 +314,86 @@ async function confirmRunCrawlingProcessStep() {
         console.log(boxedInfoMessage(
             `Crawling process was not started`,
             "You will be redirected back to the first \n step in a few seconds!",
+            false,
+            {
+                type: 'warning',
+                marginTop: true,
+            }
+        ));
+
+        await new Promise(resolve => setTimeout(resolve, 7000));
+        return firstStep();
+    }
+}
+
+async function resetProjectDataStep(reset = false) {
+    const { activeProject } = getProjectVerification();
+
+    if (!reset) {
+        return confirmResetProjectDataStep();
+    }
+
+    resetProject(activeProject.baseUrl);
+    return firstStep();
+}
+
+async function confirmResetProjectDataStep() {
+    const { activeProject, crawledLinks, visitedLinks, notVisitedLinks, linksWithError} = getProjectVerification();
+    const boxTitle = 'Resetting the crawling process for the selected following project';
+
+    let internalLine = []
+    for (let i = 0; i < boxTitle.length + 10; i++) {
+        internalLine.push('-');
+    }
+
+    let message = [];
+    message.push('You are about to erase all data for the following project:');
+    message.push(chalk.bold.cyanBright(activeProject.baseUrl));
+    message.push(internalLine.join(''));
+    message.push(chalk.bold.yellowBright('PROJECT STATUS:'));
+    message.push('Links found: ' + chalk.bold.cyanBright(crawledLinks.length));
+    message.push('Links tested: ' + chalk.bold.greenBright(visitedLinks.length));
+    message.push('Links to test: ' + chalk.bold.yellowBright(notVisitedLinks.length));
+    message.push('Links with error: ' + chalk.bold.redBright(linksWithError.length));
+
+    const confirmResetProjectDataPrompt = [{
+        type: 'confirm',
+        name: 'confirmation',
+        message: 'Do you confirm this action?'
+    }];
+
+    console.log(boxedInfoMessage(
+        boxTitle,
+        message.join("\n"),
+        chalk.bold.redBright('THIS ACTION CANNOT BE UNDONE!'),
+        {
+            type: 'warning',
+            marginTop: true,
+        }
+    ));
+
+    const confirmResetProjectDataResult = await prompts(confirmResetProjectDataPrompt);
+
+    if (confirmResetProjectDataResult?.confirmation === true) {
+        console.log(boxedInfoMessage(
+            `Project was successfully resected`,
+            "You will be redirected back to the first \n step in a few seconds!",
+            false,
+            {
+                type: 'success',
+                marginTop: true,
+                marginBottom: true
+            }
+        ));
+
+        await new Promise(resolve => setTimeout(resolve, 7000));
+        return resetProjectDataStep(true);
+    }
+
+    if (!confirmResetProjectDataResult?.confirmation) {
+        console.log(boxedInfoMessage(
+            `Reset process was not executed`,
+            "You will be redirected back to the \n first step in a few seconds!",
             false,
             {
                 type: 'warning',
