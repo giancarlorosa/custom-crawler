@@ -111,7 +111,12 @@ const getActiveProject = (sessionId) => {
         runningProjectsConfig = getRunningProjectsConfig();
     }
 
+    const tempProject = runningProjectsConfig.filter(project => project.sessionId === sessionId)[0];
     const activeProject = runningProjectsConfig.filter(project => project.active === true)[0];
+
+    if (tempProject && getProjectConfig(tempProject?.baseUrl)) {
+        return tempProject;
+    }
 
     if (!activeProject || !getProjectConfig(activeProject?.baseUrl)) {
         setRunningProject(runningProjectsConfig[0].baseUrl);
@@ -145,6 +150,8 @@ function removeRunningProject(baseUrl) {
     const runningProjectsConfig = getRunningProjectsConfig();
     const hasRunningProject = runningProjectExists(baseUrl);
     const runningProjectConfigFile = `${projectsFolder}/config.json`;
+    const projectName = getProjectName(baseUrl);
+    const selectedProjectFolder = `${projectsFolder}/${projectName}`;
 
     try {
         if (!runningProjectsConfig || !hasRunningProject) {
@@ -154,6 +161,7 @@ function removeRunningProject(baseUrl) {
         const runningProjectConfigData = runningProjectsConfig.filter(project => project.baseUrl !== baseUrl);
 
         fs.writeFileSync(runningProjectConfigFile, JSON.stringify(runningProjectConfigData), 'utf8');
+        fs.rmSync(selectedProjectFolder, { recursive: true, force: true });
         return true;
     } catch (error) {
         return false;
@@ -174,8 +182,18 @@ function setRunningProject(baseUrl, sessionId = false) {
         }
 
         if (runningProjectsConfig && !runningProject) {
-            const inactivatedRunningProjects = runningProjectsConfig.map(project => { return { ...project, active: false, sessionId: !projectExists(project.baseUrl) } });
-            runningProjectConfigData = [...inactivatedRunningProjects, { baseUrl, active: true, sessionId: !projectExists(baseUrl) }];
+            const inactivatedRunningProjects = runningProjectsConfig.map(project => {
+                return {
+                    ...project,
+                    active: sessionId ? project.active : false
+                }
+            });
+
+            runningProjectConfigData = [...inactivatedRunningProjects, {
+                baseUrl,
+                active: sessionId ? false : true,
+                sessionId
+            }];
 
             if (!baseUrl) {
                 runningProjectConfigData = runningProjectsConfig;
@@ -184,13 +202,11 @@ function setRunningProject(baseUrl, sessionId = false) {
 
         if (runningProjectsConfig && runningProject) {
             runningProjectConfigData = runningProjectsConfig.map(project => {
-                const sessionId = !projectExists(project.baseUrl);
-
                 if (project.baseUrl === baseUrl) {
                     return { ...project, active: true, sessionId };
                 }
 
-                return { ...project, active: false, sessionId };
+                return { ...project, active: false };
             });
         }
 
@@ -201,12 +217,13 @@ function setRunningProject(baseUrl, sessionId = false) {
     }
 }
 
-const createProject = (baseUrl, protocol, folderRestriction = null, pageLimit = 500, crawlingSpeed = 'fast') => {
-    const projectConfig = { baseUrl, protocol, folderRestriction, pageLimit, crawlingSpeed };
+const createProject = (baseUrl, protocol, sessionId, folderRestriction = null, pageLimit = 500, crawlingSpeed = 'fast') => {
+    const folderRestrictionFormatted = folderRestriction && folderRestriction.indexOf(',') > -1 ? folderRestriction.split(',') : folderRestriction;
+    const projectConfig = { baseUrl, protocol, folderRestriction: folderRestrictionFormatted, pageLimit, crawlingSpeed };
     const projectName = getProjectName(baseUrl);
     const projectBaseData = getProjectBaseListToCraw(baseUrl, folderRestriction);
 
-    if (projectExists(baseUrl) || !projectName || !setRunningProject(baseUrl)) {
+    if (projectExists(baseUrl) || !projectName || !setRunningProject(baseUrl, sessionId)) {
         return false;
     }
 
@@ -248,6 +265,7 @@ module.exports = {
     exportsFolder,
     projectExists,
     createProject,
+    removeRunningProject,
     resetProject,
     getProjectName,
     getProjectConfig,

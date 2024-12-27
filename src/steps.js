@@ -9,7 +9,8 @@ const {
     getProjectConfig,
     getProjectPredefinedConfigs,
     setRunningProject,
-    createProject
+    createProject,
+    removeRunningProject
 } = require('./project_management');
 const { getCrawledLinks } = require('./crawler');
 const { getSessionId, boxedConfigMessage } = require('./utils');
@@ -36,7 +37,7 @@ function getProjectVerification() {
         }
 
         const availableProjects = runningProjects.filter(project => {
-            return project.baseUrl !== activeProject.baseUrl && project.disabled === false;
+            return project.baseUrl !== activeProject.baseUrl;
         });
 
         return availableProjects.length > 0;
@@ -331,17 +332,17 @@ async function configureProjectStep(baseUrl = null) {
     createProject(
         projectCurrentConfig.baseUrl,
         projectCurrentConfig.protocol,
+        sessionId,
         projectCurrentConfig.folderRestriction,
         projectCurrentConfig.pageLimit,
         projectCurrentConfig.crawlingSpeed
     );
 
-    setRunningProject(baseUrl, sessionId);
-
     return confirmConfigurationStep(baseUrl);
 }
 
 async function confirmConfigurationStep(baseUrl) {
+    const { activeProject } = getProjectVerification();
     const confirmConfigurationPrompt = [{
         type: 'confirm',
         name: 'confirmation',
@@ -352,10 +353,13 @@ async function confirmConfigurationStep(baseUrl) {
     const confirmConfigurationResult = await prompts(confirmConfigurationPrompt);
 
     if (!confirmConfigurationResult.confirmation) {
-        console.log(chalk.black.bgRedBright('REMOVE TEMPORARY PROJECT'));
+        removeRunningProject(activeProject.baseUrl);
     }
 
-    return firstStep();
+    if (confirmConfigurationResult?.confirmation === true) {
+        setRunningProject(activeProject.baseUrl);
+        return firstStep();
+    }
 }
 
 module.exports = {
