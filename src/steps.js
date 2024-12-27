@@ -20,7 +20,11 @@ const {
     boxedInfoMessage,
     boxedConfigMessage
 } = require('./utils');
-const { getCrawledLinks, storeLinkList } = require('./crawler');
+const {
+    getCrawledLinks,
+    storeLinkList,
+    startCrawlingProcess
+} = require('./crawler');
 
 const sessionId = getSessionId();
 
@@ -224,6 +228,11 @@ async function firstStep(configType = null) {
                     description: 'Filter the collected data from the active project.',
                     value: 'filter',
                     disabled: !hasVisitedLinks
+                },
+                {
+                    title: 'Cancel',
+                    description: 'Close the custom crawling app.',
+                    value: 'cancel'
                 }
             ],
             initial: getInitialOption()
@@ -242,8 +251,75 @@ async function firstStep(configType = null) {
             return removeProjectStep();
         case 'config':
             return configureProjectStep();
+        case 'start':
+            return runCrawlingProcessStep();
+        case 'cancel':
+            return;
         default:
             return firstStepResult;
+    }
+}
+
+async function runCrawlingProcessStep(start = false) {
+    const { activeProject } = getProjectVerification();
+
+    if (!start) {
+        return confirmRunCrawlingProcessStep();
+    }
+
+    return startCrawlingProcess(activeProject.baseUrl);
+}
+
+async function confirmRunCrawlingProcessStep() {
+    const { activeProject, hasVisitedLinks} = getProjectVerification();
+
+    const confirmRunCrawlingProcessPrompt = [{
+        type: 'confirm',
+        name: 'confirmation',
+        message: 'Do you confirm this action?'
+    }];
+
+    console.log(boxedInfoMessage(
+        `${hasVisitedLinks ? 'Resuming' : 'Starting'} the crawling process for the following project`,
+        activeProject.baseUrl,
+        false,
+        {
+            type: 'info',
+            marginTop: true,
+        }
+    ));
+
+    const confirmRunCrawlingProcessResult = await prompts(confirmRunCrawlingProcessPrompt);
+
+    if (confirmRunCrawlingProcessResult?.confirmation === true) {
+        console.log(boxedInfoMessage(
+            `Your crawling process will start right now`,
+            `In a few seconds, the crawling process will start \n for the following project: \n ${chalk.greenBright(activeProject.baseUrl)}`,
+            chalk.black.bgYellowBright('NOTE:') + ` You can stop this process at any moment by \n clicking ${chalk.bold.yellowBright('Ctrl+C')}.`,
+            {
+                type: 'success',
+                marginTop: true,
+                marginBottom: true
+            }
+        ));
+
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        return runCrawlingProcessStep(true);
+    }
+
+    if (!confirmRunCrawlingProcessResult?.confirmation) {
+        console.log(boxedInfoMessage(
+            `Crawling process was not started`,
+            "You will be redirected back to the first \n step in a few seconds!",
+            false,
+            {
+                type: 'warning',
+                marginTop: true,
+            }
+        ));
+
+        await new Promise(resolve => setTimeout(resolve, 7000));
+        return firstStep();
     }
 }
 
@@ -383,7 +459,7 @@ async function configureProjectStep(baseUrl = null) {
     if (!preDefinedConfigs?.crawlingSpeed && !configureProjectResult?.crawlingSpeed) {
         console.log(boxedInfoMessage(
             `Project ${baseUrl ? 'creation' : 'configuration'} process canceled`,
-            "You will be redirected back to the first step \n in a few seconds!",
+            "You will be redirected back to the first \n step in a few seconds!",
             false,
             {
                 type: 'warning',
@@ -391,7 +467,7 @@ async function configureProjectStep(baseUrl = null) {
             }
         ));
 
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        await new Promise(resolve => setTimeout(resolve, 7000));
         return firstStep();
     }
 
