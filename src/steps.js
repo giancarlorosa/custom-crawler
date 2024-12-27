@@ -386,7 +386,7 @@ async function configureProjectStep(baseUrl = null) {
             "You will be redirected back to the first step \n in a few seconds!",
             false,
             {
-                type: 'info',
+                type: 'warning',
                 marginTop: true,
             }
         ));
@@ -505,7 +505,7 @@ async function removeProjectStep() {
             "You will be redirected back to the \n first step in a few seconds!",
             false,
             {
-                type: 'info',
+                type: 'warning',
                 marginTop: true,
             }
         ));

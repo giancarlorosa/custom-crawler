@@ -231,7 +231,7 @@ const createProject = (baseUrl, protocol, sessionId, folderRestriction = null, p
     const folderRestrictionFormatted = folderRestriction && folderRestriction.indexOf(',') > -1 ? folderRestriction.split(',') : folderRestriction;
     const projectConfig = { baseUrl, protocol, folderRestriction: folderRestrictionFormatted, pageLimit, crawlingSpeed };
     const projectName = getProjectName(baseUrl);
-    const projectBaseData = getProjectBaseListToCraw(baseUrl, folderRestriction);
+    const projectBaseData = getProjectBaseListToCraw(baseUrl, folderRestrictionFormatted);
 
     if (projectExists(baseUrl) || !projectName || !setRunningProject(baseUrl, sessionId)) {
         return false;
