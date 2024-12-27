@@ -7,9 +7,12 @@ const {
     getActiveProject,
     getRunningProjectsConfig,
     getProjectConfig,
+    getProjectBaseListToCraw,
+    getTempProjectConfig,
     getProjectPredefinedConfigs,
     setRunningProject,
     createProject,
+    updateProjectConfig,
     removeRunningProject
 } = require('./project_management');
 const {
@@ -17,7 +20,7 @@ const {
     boxedInfoMessage,
     boxedConfigMessage
 } = require('./utils');
-const { getCrawledLinks } = require('./crawler');
+const { getCrawledLinks, storeLinkList } = require('./crawler');
 
 const sessionId = getSessionId();
 
@@ -26,6 +29,7 @@ function getProjectVerification() {
     const runningProjects = getRunningProjectsConfig();
     const activeProject = getActiveProject(sessionId);
     const projectConfig = activeProject ? getProjectConfig(activeProject.baseUrl) : null;
+    const tempProjectConfig = projectConfig ? getTempProjectConfig(activeProject.baseUrl, sessionId) : null;
     const crawledLinks = activeProject ? getCrawledLinks(activeProject.baseUrl) : null;
     const visitedLinks = crawledLinks ? crawledLinks.filter(link => link.visited === true) : null;
     const notVisitedLinks = crawledLinks ? crawledLinks.filter(link => link.visited === false) : null;
@@ -60,6 +64,7 @@ function getProjectVerification() {
         runningProjects,
         activeProject,
         projectConfig,
+        tempProjectConfig,
         crawledLinks,
         visitedLinks,
         notVisitedLinks,
@@ -72,8 +77,18 @@ function getProjectVerification() {
 }
 
 function printProjectConfig(configType = null) {
-    const { projectConfig, activeProject, crawledLinks, visitedLinks, linksWithError, notVisitedLinks } = getProjectVerification();
-    let projectConfigDisplay = typeof projectConfig.folderRestriction === 'string' ? projectConfig : { ...projectConfig, folderRestriction: 'None'};
+    const {
+        projectConfig,
+        tempProjectConfig,
+        activeProject,
+        crawledLinks,
+        visitedLinks,
+        linksWithError,
+        notVisitedLinks
+    } = getProjectVerification();
+
+    const projectConfigCheck = tempProjectConfig && configType === 'update' ? tempProjectConfig : projectConfig;
+    let projectConfigDisplay = typeof projectConfigCheck.folderRestriction === 'string' ? projectConfigCheck : { ...projectConfigCheck, folderRestriction: 'None'};
     let runningProjectFootnotes = [];
     let boxTitle = '';
 
@@ -84,13 +99,19 @@ function printProjectConfig(configType = null) {
         case 'project':
             boxTitle = 'This project already exists. What would you like to do now?';
             break;
+        case 'update':
+            boxTitle = 'PLEASE, CHECK YOUR NEW PROJECT CONFIGURATION';
+            break;
         default:
             boxTitle = 'YOU ARE RUNNING THE FOLLOWING PROJECT RIGHT NOW';
             break;
     }
 
-    if (projectConfig.folderRestriction && typeof projectConfig.folderRestriction === 'object') {
-        const folderRestrictions = projectConfig.folderRestriction;
+    delete projectConfigDisplay.tempConfig;
+    delete projectConfigDisplay.sessionId;
+
+    if (projectConfigCheck.folderRestriction && typeof projectConfigCheck.folderRestriction === 'object') {
+        const folderRestrictions = projectConfigCheck.folderRestriction;
         let folderRestrictionsObj = {};
 
         // Remove older folder restrictions
@@ -101,10 +122,10 @@ function printProjectConfig(configType = null) {
         }
 
         projectConfigDisplay = {
-            'Base URL': projectConfig.baseUrl,
-            'Protocol': projectConfig.protocol.replace(':', ''),
-            'Crawling limit': projectConfig.pageLimit === 0 ? 'Unlimited' : projectConfig.pageLimit,
-            'Crawling speed': projectConfig.crawlingSpeed,
+            'Base URL': projectConfigCheck.baseUrl,
+            'Protocol': projectConfigCheck.protocol.replace(':', ''),
+            'Crawling limit': projectConfigCheck.pageLimit === 0 ? 'Unlimited' : projectConfigCheck.pageLimit,
+            'Crawling speed': projectConfigCheck.crawlingSpeed,
             'Folder restrictions rules': folderRestrictions.length,
             ...folderRestrictionsObj
         }
@@ -126,7 +147,7 @@ function printProjectConfig(configType = null) {
         console.log(boxedConfigMessage(
             boxTitle,
             projectConfigDisplay,
-            runningProjectFootnotes.join("\n"),
+            configType !== 'create' && configType !== 'update' ? runningProjectFootnotes.join("\n") : false,
             true,
             true
         ));
@@ -219,6 +240,8 @@ async function firstStep(configType = null) {
             return projectSelectionStep();
         case 'remove':
             return removeProjectStep();
+        case 'config':
+            return configureProjectStep();
         default:
             return firstStepResult;
     }
@@ -267,12 +290,31 @@ async function createProjectStep() {
 }
 
 async function configureProjectStep(baseUrl = null) {
-    let { projectConfig, runningProjects } = getProjectVerification();
+    const { projectConfig, runningProjects } = getProjectVerification();
+    const localBaseUrl = baseUrl ? baseUrl : projectConfig.baseUrl;
+    const crawlingSpeedSelectedOption = {
+        'fast': 0,
+        'medium': 1,
+        'slow': 2
+    }
     let preDefinedConfigs = null;
+
 
     if (baseUrl && getProjectConfig(baseUrl)) {
         setRunningProject(baseUrl);
         return firstStep('projectExists');
+    }
+
+    if (!baseUrl) {
+        console.log(boxedInfoMessage(
+            'Updating/changing project configuration',
+            "You are about to change/update the configuration \n for the following project:",
+            chalk.bold.cyanBright(projectConfig.baseUrl),
+            {
+                type: 'info',
+                marginTop: true
+            }
+        ));
     }
 
     const configureProjectPrompt = [
@@ -283,16 +325,18 @@ async function configureProjectStep(baseUrl = null) {
             choices: [
                 { title: 'No', description: 'All pages will be crawled until reach your crawling limit configuration.', value: 'no' },
                 { title: 'Yes', description: 'You can restrict the crawling process to a specific folder.', value: 'yes' },
-            ]
+            ],
+            initial: !baseUrl && projectConfig?.folderRestriction ? 1 : 0
         },
         {
             type: (prev, values) => values.hasFolderRestriction === 'yes' ? 'text' : null,
             name: 'folderRestriction',
-            message: 'Inform the folder to restrict your crawling process: (For more than one rule, use comma (,))',
-            validate: value => value.length < 2 || (value.slice(0, 1) !== '/' && value.slice(0, 2) !== '!/') ? 'Your folder can not be empty and must start with / (e.g. /locations)' : true
+            message: "Inform the folder to restrict your crawling process:\n(For more than one rule, use comma (,))",
+            // validate: value => value.length < 2 || (value.slice(0, 1) !== '/' && value.slice(0, 2) !== '!/') ? 'Your folder can not be empty and must start with / (e.g. /locations)' : true,
+            initial: !baseUrl && projectConfig?.folderRestriction ? projectConfig.folderRestriction : ''
         },
         {
-            type: 'select',
+            type: (prev, values) => baseUrl ? 'select' : null,
             name: 'configType',
             message: 'How would you like to configure your project?',
             choices: [
@@ -303,21 +347,22 @@ async function configureProjectStep(baseUrl = null) {
             ]
         },
         {
-            type: (prev, values) => values.configType === 'manual' ? 'number' : null,
+            type: (prev, values) => values.configType === 'manual' || !baseUrl ? 'number' : null,
             name: 'pageLimit',
             message: 'Set the limit of pages to be crawled (0 represents unlimited pages):',
             validate: value => Number.isInteger(value) && value < 0 ? 'You need to inform a valid number' : true,
-            initial: 0
+            initial: !baseUrl ? projectConfig.pageLimit : 0
         },
         {
-            type: (prev, values) => values.configType === 'manual' ? 'select' : null,
+            type: (prev, values) => values.configType === 'manual' || !baseUrl ? 'select' : null,
             name: 'crawlingSpeed',
             message: 'Choose the crawling speed:',
             choices: [
                 { title: 'Fast speed', description: 'No daley during the crawler process (Suitable for under than 100 pages).', value: 'fast' },
                 { title: 'Medium speed', description: 'Add a 2s delay for each 50 crawled pages (Suitable between 100 to 500 pages).', value: 'medium' },
                 { title: 'Slow speed', description: 'Add a 2s delay for each 10 crawled pages (Suitable for more then 500 pages).', value: 'slow' },
-            ]
+            ],
+            initial: !baseUrl ? crawlingSpeedSelectedOption[projectConfig.crawlingSpeed] : 0
         }
     ];
 
@@ -328,42 +373,86 @@ async function configureProjectStep(baseUrl = null) {
     }
 
     const projectCurrentConfig = {
-        baseUrl,
-        protocol: baseUrl.slice(0, baseUrl.indexOf(':')),
+        baseUrl: localBaseUrl,
+        protocol: localBaseUrl.slice(0, localBaseUrl.indexOf(':')),
         folderRestriction: configureProjectResult.folderRestriction,
         pageLimit: preDefinedConfigs ? preDefinedConfigs.pageLimit : configureProjectResult.pageLimit,
         crawlingSpeed: preDefinedConfigs ? preDefinedConfigs.crawlingSpeed : configureProjectResult.crawlingSpeed,
     };
 
-    createProject(
-        projectCurrentConfig.baseUrl,
-        projectCurrentConfig.protocol,
-        sessionId,
-        projectCurrentConfig.folderRestriction,
-        projectCurrentConfig.pageLimit,
-        projectCurrentConfig.crawlingSpeed
-    );
+    if (!preDefinedConfigs?.crawlingSpeed && !configureProjectResult?.crawlingSpeed) {
+        console.log(boxedInfoMessage(
+            `Project ${baseUrl ? 'creation' : 'configuration'} process canceled`,
+            "You will be redirected back to the first step \n in a few seconds!",
+            false,
+            {
+                type: 'info',
+                marginTop: true,
+            }
+        ));
+
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        return firstStep();
+    }
+
+    if (!baseUrl) {
+        updateProjectConfig({
+            baseUrl: projectCurrentConfig.baseUrl,
+            protocol: projectCurrentConfig.protocol,
+            sessionId: sessionId,
+            folderRestriction: projectCurrentConfig.folderRestriction,
+            pageLimit: projectCurrentConfig.pageLimit,
+            crawlingSpeed: projectCurrentConfig.crawlingSpeed
+        }, true);
+    } else {
+        createProject(
+            projectCurrentConfig.baseUrl,
+            projectCurrentConfig.protocol,
+            sessionId,
+            projectCurrentConfig.folderRestriction,
+            projectCurrentConfig.pageLimit,
+            projectCurrentConfig.crawlingSpeed
+        );
+    }
 
     return confirmConfigurationStep(baseUrl);
 }
 
 async function confirmConfigurationStep(baseUrl) {
-    const { activeProject } = getProjectVerification();
+    const { activeProject, tempProjectConfig, crawledLinks } = getProjectVerification();
     const confirmConfigurationPrompt = [{
         type: 'confirm',
         name: 'confirmation',
         message: 'Is your project configuration correct?'
     }];
 
-    printProjectConfig('create');
+    printProjectConfig(baseUrl ? 'create' : 'update');
     const confirmConfigurationResult = await prompts(confirmConfigurationPrompt);
 
-    if (!confirmConfigurationResult.confirmation) {
-        removeRunningProject(activeProject.baseUrl);
+    if (baseUrl) {
+        if (!confirmConfigurationResult.confirmation) {
+            removeRunningProject(activeProject.baseUrl);
+        }
+
+        if (confirmConfigurationResult?.confirmation === true) {
+            setRunningProject(activeProject.baseUrl);
+        }
+    } else {
+        if (confirmConfigurationResult?.confirmation === true) {
+            const projectBaseList = getProjectBaseListToCraw(tempProjectConfig.baseUrl, tempProjectConfig.folderRestriction);
+            const notIncludedLinks = projectBaseList.filter(notIncludedLink => {
+                return crawledLinks.filter(link => link.url === notIncludedLink.url).length < 1;
+            });
+
+            updateProjectConfig(tempProjectConfig);
+            storeLinkList(tempProjectConfig.baseUrl, [
+                ...crawledLinks,
+                ...notIncludedLinks
+            ])
+        }
     }
 
-    if (confirmConfigurationResult?.confirmation === true) {
-        setRunningProject(activeProject.baseUrl);
+    if (confirmConfigurationResult?.confirmation !== undefined) {
         return firstStep();
     }
 }

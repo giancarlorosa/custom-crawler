@@ -323,5 +323,6 @@ const startCrawlingProcess = async (baseUrl) => {
 
 module.exports = {
     startCrawlingProcess,
-    getCrawledLinks
+    getCrawledLinks,
+    storeLinkList
 }

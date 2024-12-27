@@ -64,6 +64,16 @@ const getProjectConfig = (baseUrl) => {
     }
 }
 
+const getTempProjectConfig = (baseUrl, sessionId) => {
+    const projectConfig = getProjectConfig(baseUrl);
+
+    if (!projectConfig || !projectConfig?.tempConfig || projectConfig.tempConfig.sessionId !== sessionId) {
+        return false;
+    }
+
+    return projectConfig.tempConfig;
+}
+
 const getProjectName = (baseUrl) => {
     try {
         const projectBaseUrl = new URL(baseUrl);
@@ -242,6 +252,40 @@ const createProject = (baseUrl, protocol, sessionId, folderRestriction = null, p
     }
 }
 
+const updateProjectConfig = (config, isTempConfig = false) => {
+    const projectConfig = getProjectConfig(config.baseUrl);
+    const projectName = getProjectName(config.baseUrl);
+    const folderRestrictionFormatted = config.folderRestriction && config.folderRestriction.indexOf(',') > -1 ? config.folderRestriction.split(',') : config.folderRestriction;
+    let tempProjectConfig = {
+        ...projectConfig,
+        tempConfig: {
+            baseUrl: config.baseUrl,
+            protocol: config.protocol,
+            sessionId: config.sessionId,
+            folderRestriction: folderRestrictionFormatted,
+            pageLimit: config.pageLimit,
+            crawlingSpeed: config.crawlingSpeed
+        }
+    };
+
+    if (!projectConfig) {
+        return false;
+    }
+
+    if (!isTempConfig) {
+        tempProjectConfig = config;
+    }
+
+    delete tempProjectConfig.sessionId;
+
+    try {
+        fs.writeFileSync(`${projectsFolder}/${projectName}/config.json`, JSON.stringify(tempProjectConfig), 'utf8');
+        return true;
+    } catch (error) {
+        return false;
+    }
+}
+
 const resetProject = (baseUrl) => {
     const projectConfig = getProjectConfig(baseUrl);
     const projectName = getProjectName(baseUrl);
@@ -265,11 +309,14 @@ module.exports = {
     exportsFolder,
     projectExists,
     createProject,
+    updateProjectConfig,
     removeRunningProject,
     resetProject,
     getProjectName,
     getProjectConfig,
+    getTempProjectConfig,
     getProjectPredefinedConfigs,
+    getProjectBaseListToCraw,
     getBaseDataObj,
     getRunningProjectsConfig,
     getActiveProject,
