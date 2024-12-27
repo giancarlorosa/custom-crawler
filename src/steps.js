@@ -12,8 +12,12 @@ const {
     createProject,
     removeRunningProject
 } = require('./project_management');
+const {
+    getSessionId,
+    boxedInfoMessage,
+    boxedConfigMessage
+} = require('./utils');
 const { getCrawledLinks } = require('./crawler');
-const { getSessionId, boxedConfigMessage } = require('./utils');
 
 const sessionId = getSessionId();
 
@@ -213,6 +217,8 @@ async function firstStep(configType = null) {
             return createProjectStep();
         case 'change':
             return projectSelectionStep();
+        case 'remove':
+            return removeProjectStep();
         default:
             return firstStepResult;
     }
@@ -360,6 +366,64 @@ async function confirmConfigurationStep(baseUrl) {
         setRunningProject(activeProject.baseUrl);
         return firstStep();
     }
+}
+
+async function removeProjectStep() {
+    const { activeProject } = getProjectVerification();
+    const confirmProjectRemovalPrompt = [{
+        type: 'confirm',
+        name: 'confirmation',
+        message: 'Are you sure about this action?'
+    }];
+
+    let message = [];
+    message.push('This action will erase the following project with');
+    message.push('all its data and configuration:');
+    message.push(chalk.bold.cyanBright(activeProject.baseUrl));
+
+    console.log(boxedInfoMessage(
+        'You are about to remove the following project',
+        message.join("\n"),
+        chalk.bold.redBright('THIS ACTION CANNOT BE UNDONE!'),
+        {
+            type: 'warning',
+            marginTop: true,
+        }
+    ));
+
+    const confirmProjectRemovalResult = await prompts(confirmProjectRemovalPrompt);
+
+    if (confirmProjectRemovalResult.confirmation === true) {
+        removeRunningProject(activeProject.baseUrl);
+
+        let successMessage = [];
+        successMessage.push('The following project is no longer part of');
+        successMessage.push('your project list:');
+        successMessage.push(chalk.bold.cyanBright(activeProject.baseUrl));
+
+        console.log(boxedInfoMessage(
+            'Your project was successfully removed',
+            successMessage.join("\n"),
+            "You will be redirected back to the first step \n in a few seconds!",
+            {
+                type: 'success',
+                marginTop: true,
+            }
+        ));
+    } else {
+        console.log(boxedInfoMessage(
+            'Project removal process canceled',
+            "You will be redirected back to the \n first step in a few seconds!",
+            false,
+            {
+                type: 'info',
+                marginTop: true,
+            }
+        ));
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 7000));
+    return firstStep();
 }
 
 module.exports = {
