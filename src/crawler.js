@@ -189,7 +189,7 @@ const startCrawlingProcess = async (baseUrl) => {
     footNotes.push('Links with error: ' + chalk.bold.redBright(linksWithError.length));
 
     console.clear();
-    console.log(boxedInfoMessage(
+    process.stdout.write(boxedInfoMessage(
         `Running crawling process for ${baseUrl}`,
         chalk.bold("Testing url: ") + linkToCrawl.url,
         footNotes.join("\n"),
@@ -302,6 +302,13 @@ const startCrawlingProcess = async (baseUrl) => {
 
         if (getLinkToCrawl(baseUrl)) {
             // console.log(chalk.greenBright('Looking for a new url to Crawl'));
+            console.clear();
+            process.stdout.write(boxedInfoMessage(
+                `Running crawling process for ${baseUrl}`,
+                chalk.bold("Testing url: ") + linkToCrawl.url,
+                footNotes.join("\n"),
+                'warning'
+            ));
             startCrawlingProcess(baseUrl);
         } else {
             // console.log(chalk.black.bgGreenBright('SCRAP PROCESS FINISHED!'));
@@ -330,10 +337,24 @@ const startCrawlingProcess = async (baseUrl) => {
             return link;
         });
 
+        console.clear();
+        process.stdout.write(boxedInfoMessage(
+            `Running crawling process for ${baseUrl}`,
+            chalk.bold("Testing url: ") + linkToCrawl.url,
+            footNotes.join("\n"),
+            'warning'
+        ));
         storeLinkList(baseUrl, updatedLinkList);
 
         if (getLinkToCrawl(baseUrl)) {
             // console.log(chalk.cyanBright('Looking for a new url to Crawl'));
+            console.clear();
+            process.stdout.write(boxedInfoMessage(
+                `Running crawling process for ${baseUrl}`,
+                chalk.bold("Testing url: ") + linkToCrawl.url,
+                footNotes.join("\n"),
+                'warning'
+            ));
             startCrawlingProcess(baseUrl);
         } else {
             // console.log(chalk.black.bgGreenBright('SCRAP PROCESS FINISHED!'));
