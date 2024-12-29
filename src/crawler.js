@@ -160,27 +160,11 @@ const storeLinkList = (baseUrl, linkList) => {
     }
 }
 
-const startCrawlingProcess = async (baseUrl) => {
-    const projectConfig = getProjectConfig(baseUrl);
-    const baseUrlObj = new URL(baseUrl);
+function printCrawlingStats(baseUrl, testingLink) {
     const linkList = getCrawledLinks(baseUrl);
     const visitedLinks = linkList.filter(link => link.visited === true);
     const notVisitedLinks = linkList.filter(link => link.visited === false);
     const linksWithError = linkList.filter(link => link.statusCode !== 200 && link.statusCode !== 301 && link.visited === true);
-    const linkToCrawl = getLinkToCrawl(baseUrl);
-    const urlObj = linkToCrawl ? new URL(linkToCrawl.url) : null;
-
-    if (!projectConfig || !linkToCrawl) {
-        // console.log("\n");
-        // console.log(chalk.black.bgCyanBright('No URLs to crawl!'));
-        // console.log('If you want to crawl this project again, please, reset the project and start the crawling process again!');
-        return false;
-    }
-
-    // console.log('### STARTING CRAWLING PROCESS! ###');
-    // console.log('Project Name:', projectName);
-    // console.log('Project Config:', projectConfig);
-    // console.log('URL to Crawl:', linkToCrawl.url);
 
     let footNotes = [];
     footNotes.push('Links found: ' + chalk.bold.cyanBright(linkList.length));
@@ -189,12 +173,26 @@ const startCrawlingProcess = async (baseUrl) => {
     footNotes.push('Links with error: ' + chalk.bold.redBright(linksWithError.length));
 
     console.clear();
-    process.stdout.write(boxedInfoMessage(
+    console.log(boxedInfoMessage(
         `Running crawling process for ${baseUrl}`,
-        chalk.bold("Testing url: ") + linkToCrawl.url,
+        chalk.bold("Testing url: ") + testingLink,
         footNotes.join("\n"),
         'warning'
     ));
+}
+
+const startCrawlingProcess = async (baseUrl) => {
+    const projectConfig = getProjectConfig(baseUrl);
+    const baseUrlObj = new URL(baseUrl);
+    const linkList = getCrawledLinks(baseUrl);
+    const linkToCrawl = getLinkToCrawl(baseUrl);
+    const urlObj = linkToCrawl ? new URL(linkToCrawl.url) : null;
+
+    if (!projectConfig || !linkToCrawl) {
+        return false;
+    }
+
+    printCrawlingStats(baseUrl, linkToCrawl.url);
 
     try {
         // Constants
@@ -218,9 +216,6 @@ const startCrawlingProcess = async (baseUrl) => {
         if (externalLink || documentLink) {
             scrapPage = false;
         }
-
-        // console.log("Scrap page: ", isRestrictedLink(urlObj.pathname, baseUrl));
-        // console.log("Scrap responseUrl: ", isRestrictedLink(responseUrlObj.pathname, baseUrl));
 
         if (
             projectConfig.folderRestriction
@@ -253,7 +248,6 @@ const startCrawlingProcess = async (baseUrl) => {
                             || (projectConfig.pageLimit > 0 && pagesCrawled < projectConfig.pageLimit)
                         )
                     ) {
-                        // console.log('Add item', validUrl);
                         linksToCrawl.push(getBaseDataObj(validUrl));
                     }
                 }
@@ -271,7 +265,6 @@ const startCrawlingProcess = async (baseUrl) => {
                 || (projectConfig.pageLimit > 0 && linkList.length + linksToCrawl.length < projectConfig.pageLimit)
             )
         ) {
-            // console.log('Add redirect link', validUrl);
             linksToCrawl.push(getBaseDataObj(responseUrl));
         }
 
@@ -293,35 +286,17 @@ const startCrawlingProcess = async (baseUrl) => {
             return link;
         });
 
-        storeLinkList(baseUrl, [
-            ...updatedLinkList,
-            ...linksToCrawl
-        ]);
-
-        // console.log('-----------------------');
+        storeLinkList(baseUrl, [...updatedLinkList,...linksToCrawl]);
+        printCrawlingStats(baseUrl, linkToCrawl.url);
 
         if (getLinkToCrawl(baseUrl)) {
-            // console.log(chalk.greenBright('Looking for a new url to Crawl'));
-            console.clear();
-            process.stdout.write(boxedInfoMessage(
-                `Running crawling process for ${baseUrl}`,
-                chalk.bold("Testing url: ") + linkToCrawl.url,
-                footNotes.join("\n"),
-                'warning'
-            ));
             startCrawlingProcess(baseUrl);
         } else {
-            // console.log(chalk.black.bgGreenBright('SCRAP PROCESS FINISHED!'));
-            // console.log('Crawled links:', getCrawledLinks(baseUrl).length);
+            return;
         }
     } catch (error) {
         const responseUrl = error.request?.res?.responseUrl || error.config.url;
         const statusCode = error?.code === 'ETIMEDOUT' ? 408 : error.status;
-
-        // console.log(chalk.white.bgRed('ERROR:'), error);
-        // console.log('-----------------------');
-        // console.log(chalk.redBright('Link with error:'), error.config.url);
-        // console.log('-----------------------');
 
         const updatedLinkList = linkList.map(link => {
             if (link.url === error.config.url) {
@@ -337,28 +312,13 @@ const startCrawlingProcess = async (baseUrl) => {
             return link;
         });
 
-        console.clear();
-        process.stdout.write(boxedInfoMessage(
-            `Running crawling process for ${baseUrl}`,
-            chalk.bold("Testing url: ") + linkToCrawl.url,
-            footNotes.join("\n"),
-            'warning'
-        ));
         storeLinkList(baseUrl, updatedLinkList);
+        printCrawlingStats(baseUrl, linkToCrawl.url);
 
         if (getLinkToCrawl(baseUrl)) {
-            // console.log(chalk.cyanBright('Looking for a new url to Crawl'));
-            console.clear();
-            process.stdout.write(boxedInfoMessage(
-                `Running crawling process for ${baseUrl}`,
-                chalk.bold("Testing url: ") + linkToCrawl.url,
-                footNotes.join("\n"),
-                'warning'
-            ));
             startCrawlingProcess(baseUrl);
         } else {
-            // console.log(chalk.black.bgGreenBright('SCRAP PROCESS FINISHED!'));
-            // console.log('Crawled links:', getCrawledLinks(baseUrl).length);
+            return;
         }
     }
 }
