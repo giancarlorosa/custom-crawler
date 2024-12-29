@@ -166,7 +166,7 @@ const startCrawlingProcess = async (baseUrl) => {
     const linkList = getCrawledLinks(baseUrl);
     const visitedLinks = linkList.filter(link => link.visited === true);
     const notVisitedLinks = linkList.filter(link => link.visited === false);
-    const linksWithError = linkList.filter(link => link.statusCode !== 200 && link.statusCode !== 301);
+    const linksWithError = linkList.filter(link => link.statusCode !== 200 && link.statusCode !== 301 && link.visited === true);
     const linkToCrawl = getLinkToCrawl(baseUrl);
     const urlObj = linkToCrawl ? new URL(linkToCrawl.url) : null;
 
