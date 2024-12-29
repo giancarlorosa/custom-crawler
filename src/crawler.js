@@ -144,8 +144,7 @@ const getLinkToCrawl = (baseUrl) => {
 }
 
 const linksExists = (url, baseUrl) => {
-    const linkList = getCrawledLinks(baseUrl);
-
+    const linkList = getCrawledLinks(baseUrl) || [];
     return linkList.filter(link => link.url === url).length > 0;
 }
 
