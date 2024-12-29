@@ -8,7 +8,6 @@ const path = require('path');
 
 // Local constants
 const projectsFolder = './projects';
-const exportsFolder = `${projectsFolder}/exports`;
 
 const getRunningProjectsConfig = () => {
     try {
@@ -238,11 +237,13 @@ const createProject = (baseUrl, protocol, sessionId, folderRestriction = null, p
     }
 
     const newProjectFolder = `${projectsFolder}/${projectName}`;
+    const newProjectExportsFolder = `${projectsFolder}/${projectName}/exports`;
     const newProjectConfigFile = `${projectsFolder}/${projectName}/config.json`;
     const newProjectDataFile = `${projectsFolder}/${projectName}/data.json`;
 
     try {
         fs.mkdirSync(newProjectFolder);
+        fs.mkdirSync(newProjectExportsFolder);
         fs.writeFileSync(newProjectConfigFile, JSON.stringify(projectConfig), 'utf8');
         fs.writeFileSync(newProjectDataFile, JSON.stringify(projectBaseData), 'utf8');
 
@@ -306,7 +307,6 @@ const resetProject = (baseUrl) => {
 
 module.exports = {
     projectsFolder,
-    exportsFolder,
     projectExists,
     createProject,
     updateProjectConfig,

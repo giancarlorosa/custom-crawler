@@ -315,7 +315,7 @@ const startCrawlingProcess = async (baseUrl) => {
             // console.log('Crawled links:', getCrawledLinks(baseUrl).length);
         }
     } catch (error) {
-        const responseUrl = error.request?.res?.responseUrl || null;
+        const responseUrl = error.request?.res?.responseUrl || error.config.url;
         const statusCode = error?.code === 'ETIMEDOUT' ? 408 : error.status;
 
         // console.log(chalk.white.bgRed('ERROR:'), error);

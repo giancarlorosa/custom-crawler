@@ -10,11 +10,13 @@ const {
     getProjectBaseListToCraw,
     getTempProjectConfig,
     getProjectPredefinedConfigs,
+    getProjectName,
     setRunningProject,
     createProject,
     updateProjectConfig,
     removeRunningProject,
-    resetProject
+    resetProject,
+    projectsFolder
 } = require('./project_management');
 const {
     getSessionId,
@@ -26,6 +28,14 @@ const {
     storeLinkList,
     startCrawlingProcess
 } = require('./crawler');
+const {
+    printFilterStats,
+    printFilterComplete,
+    exportFilteredData,
+    filterLinksWithError,
+    filterDocumentsWithError,
+    filterAnchorsWithError
+} = require('./filters');
 
 const sessionId = getSessionId();
 
@@ -34,6 +44,7 @@ function getProjectVerification() {
     const runningProjects = getRunningProjectsConfig();
     const activeProject = getActiveProject(sessionId);
     const projectConfig = activeProject ? getProjectConfig(activeProject.baseUrl) : null;
+    const projectName = activeProject ? getProjectName(activeProject.baseUrl) : null;
     const tempProjectConfig = projectConfig ? getTempProjectConfig(activeProject.baseUrl, sessionId) : null;
     const crawledLinks = activeProject ? getCrawledLinks(activeProject.baseUrl) : null;
     const visitedLinks = crawledLinks ? crawledLinks.filter(link => link.visited === true) : null;
@@ -69,6 +80,7 @@ function getProjectVerification() {
         runningProjects,
         activeProject,
         projectConfig,
+        projectName,
         tempProjectConfig,
         crawledLinks,
         visitedLinks,
@@ -258,6 +270,8 @@ async function firstStep(configType = null) {
             return;
         case 'reset':
             return resetProjectDataStep();
+        case 'filter':
+            return filterDataStep();
         default:
             return firstStepResult;
     }
@@ -672,6 +686,110 @@ async function removeProjectStep() {
 
     await new Promise(resolve => setTimeout(resolve, 7000));
     return firstStep();
+}
+
+async function filterDataStep() {
+    const { activeProject } = getProjectVerification();
+    let selectedFilter = '';
+    let linkList = [];
+
+    const filterDataPrompt = [
+        {
+            type: 'select',
+            name: 'filter',
+            message: 'Select the type of filter that you want',
+            choices: [
+                { title: 'Links with error', description: 'Get all links with error, NOT including documents.', value: 'linkError' },
+                { title: 'Documents with error', description: 'Get all documents links error.', value: 'documentError' },
+                { title: 'Missing anchors', description: 'Get all pages with missing anchor.', value: 'anchorError' },
+            ]
+        },
+        {
+            type: 'select',
+            name: 'print',
+            message: 'How you would like to check this data?',
+            choices: [
+                { title: 'Resumed stats', description: 'Print a resumed result status.', value: 'resumed' },
+                { title: 'Show all registers', description: 'Print all registers in the screen.', value: 'complete' },
+            ]
+        }
+    ];
+
+    const filterDataResult = await prompts(filterDataPrompt);
+
+    switch(filterDataResult?.filter) {
+        case 'linkError':
+            linkList = filterLinksWithError(activeProject.baseUrl);
+            selectedFilter = 'Links with error - WITHOUT documents';
+            break;
+        case 'documentError':
+            linkList = filterDocumentsWithError(activeProject.baseUrl);
+            selectedFilter = 'Document links with error';
+            break;
+        case 'anchorError':
+            linkList = filterAnchorsWithError(activeProject.baseUrl);
+            selectedFilter = 'Pages with missing anchors';
+            break;
+    }
+
+    switch(filterDataResult?.print) {
+        case 'resumed':
+            printFilterStats(activeProject.baseUrl, selectedFilter, linkList);
+            break
+        case 'complete':
+            printFilterComplete(activeProject.baseUrl, selectedFilter, linkList);
+            break
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 4000));
+    return exportFilteredDataStep(linkList, selectedFilter);
+}
+
+async function exportFilteredDataStep(data, fileName) {
+    if (!fileName || !Array.isArray(data) || data.length < 1) {
+        return firstStep();
+    }
+
+    const { activeProject, projectName } = getProjectVerification();
+    const confirmExportFilteredDataPrompt = [{
+        type: 'confirm',
+        name: 'confirmation',
+        message: 'Would you like to export this result?'
+    }];
+
+    const confirmExportFilteredDataResult = await prompts(confirmExportFilteredDataPrompt);
+
+    if (confirmExportFilteredDataResult?.confirmation === true) {
+        console.log(boxedInfoMessage(
+            'Exporting your filtered data right now',
+            `You can check the exported data inside the folder \n ${projectsFolder}/${projectName}/exports/${fileName}.csv`,
+            false,
+            {
+                type: 'success',
+                marginTop: true,
+            }
+        ));
+
+        exportFilteredData(activeProject.baseUrl, data, fileName);
+        await new Promise(resolve => setTimeout(resolve, 5000));
+
+        return firstStep();
+    }
+
+    if (!confirmExportFilteredDataResult?.confirmation) {
+        console.log(boxedInfoMessage(
+            'Filtered data export canceled',
+            "You will be redirected back to the \n first step in a few seconds!",
+            false,
+            {
+                type: 'warning',
+                marginTop: true,
+            }
+        ));
+
+        await new Promise(resolve => setTimeout(resolve, 7000));
+        return firstStep();
+    }
 }
 
 module.exports = {
