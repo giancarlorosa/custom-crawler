@@ -278,13 +278,13 @@ async function firstStep(configType = null) {
 }
 
 async function runCrawlingProcessStep(start = false) {
-    const { activeProject } = getProjectVerification();
+    const { activeProject, crawledLinks } = getProjectVerification();
 
     if (!start) {
         return confirmRunCrawlingProcessStep();
     }
 
-    return startCrawlingProcess(activeProject.baseUrl);
+    return startCrawlingProcess(activeProject.baseUrl, crawledLinks);
 }
 
 async function confirmRunCrawlingProcessStep() {

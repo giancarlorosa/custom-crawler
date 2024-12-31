@@ -143,8 +143,7 @@ const getLinkToCrawl = (baseUrl) => {
     return linkNotVisited;
 }
 
-const linksExists = (url, baseUrl) => {
-    const linkList = getCrawledLinks(baseUrl) || [];
+const linksExists = (url, linkList) => {
     return linkList.filter(link => link.url === url).length > 0;
 }
 
@@ -159,11 +158,22 @@ const storeLinkList = (baseUrl, linkList) => {
     }
 }
 
-function printCrawlingStats(baseUrl, testingLink) {
-    const linkList = getCrawledLinks(baseUrl);
+function printCrawlingStats(baseUrl, linkList, testingLink = null, processedTime = null) {
+    if (!linkList || linkList.length < 1) {
+        return false;
+    }
+
     const visitedLinks = linkList.filter(link => link.visited === true);
     const notVisitedLinks = linkList.filter(link => link.visited === false);
     const linksWithError = linkList.filter(link => link.statusCode !== 200 && link.statusCode !== 301 && link.visited === true);
+
+    let title = `Running crawling process for ${baseUrl}`;
+    let message = chalk.bold("Testing url: ") + testingLink;
+
+    if (!testingLink) {
+        title = `Crawling process finished for ${baseUrl}`;
+        message = `Crawling process finished in ${chalk.bold.greenBright(`${processedTime} minutes`)}`;
+    }
 
     let footNotes = [];
     footNotes.push('Links found: ' + chalk.bold.cyanBright(linkList.length));
@@ -173,25 +183,34 @@ function printCrawlingStats(baseUrl, testingLink) {
 
     console.clear();
     console.log(boxedInfoMessage(
-        `Running crawling process for ${baseUrl}`,
-        chalk.bold("Testing url: ") + testingLink,
+        title,
+        message,
         footNotes.join("\n"),
-        'warning'
+        testingLink ? 'warning' : 'success'
     ));
 }
 
-const startCrawlingProcess = async (baseUrl) => {
+const crawlingProcessStarted = new Date();
+const startCrawlingProcess = async (baseUrl, linkList = null) => {
     const projectConfig = getProjectConfig(baseUrl);
     const baseUrlObj = new URL(baseUrl);
-    const linkList = getCrawledLinks(baseUrl);
-    const linkToCrawl = getLinkToCrawl(baseUrl);
+    const linkToCrawl = linkList.filter(link => link.visited === false)[0];
+    const visitedLinks = linkList.filter(link => link.visited === true);
     const urlObj = linkToCrawl ? new URL(linkToCrawl.url) : null;
 
-    if (!projectConfig || !linkToCrawl) {
+    if (!projectConfig || !linkList || !linkToCrawl) {
+        storeLinkList(baseUrl, linkList);
+
+        const crawlingProcessEnded = new Date();
+        const diffMs = (crawlingProcessEnded - crawlingProcessStarted)
+        const diffMins = Math.round(((diffMs % 86400000) % 3600000) / 60000);
+
+        printCrawlingStats(baseUrl, linkList, false, diffMins);
+
         return false;
     }
 
-    printCrawlingStats(baseUrl, linkToCrawl.url);
+    printCrawlingStats(baseUrl, linkList, linkToCrawl.url);
 
     try {
         // Constants
@@ -238,17 +257,17 @@ const startCrawlingProcess = async (baseUrl) => {
                 const validUrl = getValidUrl($(linkElement).attr('href'), urlObj.href, baseUrl);
                 const pagesCrawled = linkList.length + linksToCrawl.length;
 
-                if (validUrl) {
+                if (
+                    validUrl
+                    && !linksExists(validUrl, linkList)
+                    && !internalPageLinks.includes(linkHref)
+                    && (
+                        (projectConfig.pageLimit === 0 && pagesCrawled < 5000) // Safety limit
+                        || (projectConfig.pageLimit > 0 && pagesCrawled < projectConfig.pageLimit)
+                    )
+                ) {
+                    linksToCrawl.push(getBaseDataObj(validUrl));
                     internalPageLinks.push(linkHref);
-
-                    if (
-                        !linksExists(validUrl, baseUrl) && (
-                            (projectConfig.pageLimit === 0 && pagesCrawled < 5000) // Safety limit
-                            || (projectConfig.pageLimit > 0 && pagesCrawled < projectConfig.pageLimit)
-                        )
-                    ) {
-                        linksToCrawl.push(getBaseDataObj(validUrl));
-                    }
                 }
             });
         }
@@ -258,7 +277,7 @@ const startCrawlingProcess = async (baseUrl) => {
             redirectLink
             && !externalLink
             && !documentLink
-            && !linksExists(responseUrl)
+            && !linksExists(responseUrl, linkList)
             && (
                 (projectConfig.pageLimit === 0 && linkList.length + linksToCrawl.length < 5000) // Safety limit
                 || (projectConfig.pageLimit > 0 && linkList.length + linksToCrawl.length < projectConfig.pageLimit)
@@ -278,21 +297,19 @@ const startCrawlingProcess = async (baseUrl) => {
                     externalLink,
                     documentLink,
                     pageAnchor,
-                    links: internalPageLinks
+                    missingAnchor,
+                    // links: internalPageLinks
                 }
             }
 
             return link;
         });
 
-        storeLinkList(baseUrl, [...updatedLinkList,...linksToCrawl]);
-        printCrawlingStats(baseUrl, linkToCrawl.url);
-
-        if (getLinkToCrawl(baseUrl)) {
-            startCrawlingProcess(baseUrl);
-        } else {
-            return;
+        if (visitedLinks.length % 50 === 0) {
+            storeLinkList(baseUrl, [...updatedLinkList,...linksToCrawl]);
         }
+
+        startCrawlingProcess(baseUrl, [...updatedLinkList,...linksToCrawl]);
     } catch (error) {
         const responseUrl = error.request?.res?.responseUrl || error.config.url;
         const statusCode = error?.code === 'ETIMEDOUT' ? 408 : error.status;
@@ -311,14 +328,11 @@ const startCrawlingProcess = async (baseUrl) => {
             return link;
         });
 
-        storeLinkList(baseUrl, updatedLinkList);
-        printCrawlingStats(baseUrl, linkToCrawl.url);
-
-        if (getLinkToCrawl(baseUrl)) {
-            startCrawlingProcess(baseUrl);
-        } else {
-            return;
+        if (visitedLinks.length % 50 === 0) {
+            storeLinkList(baseUrl, updatedLinkList);
         }
+
+        startCrawlingProcess(baseUrl, updatedLinkList);
     }
 }
 
