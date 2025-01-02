@@ -95,8 +95,8 @@ const isRestrictedLink = (pathname, baseUrl) => {
     return isRestrictedLink;
 }
 
-const getValidUrl = (url, urlOrigin, baseUrl) => {
-    if (!url || !urlOrigin || !baseUrl) {
+const getValidUrl = (url, urlOrigin) => {
+    if (!url || !urlOrigin) {
         return false;
     }
 
@@ -104,15 +104,15 @@ const getValidUrl = (url, urlOrigin, baseUrl) => {
     const urlProtocol = url.slice(0, 4);
 
     if (urlFirstCharacter === '/' && url.length === 1) {
-        return `${baseUrl}`;
+        return `${urlOrigin}`;
     }
 
     if (urlFirstCharacter === '/' && url.length > 1) {
-        return `${baseUrl}${url}`;
+        return `${urlOrigin}${url}`;
     }
 
     if (urlFirstCharacter === '?' || (urlFirstCharacter === '#' && url.length > 1)) {
-        return `${urlOrigin}${url}`;
+        return `${urlOrigin}/${url}`;
     }
 
     if (urlProtocol === 'http') {
@@ -122,7 +122,7 @@ const getValidUrl = (url, urlOrigin, baseUrl) => {
     return false;
 }
 
-const getCrawledLinks = (baseUrl) => {
+function getCrawledLinks(baseUrl) {
     try {
         const projectName = getProjectName(baseUrl);
         const projectData = fs.readFileSync(`${projectsFolder}/${projectName}/data/mapped_links.json`, 'utf8');
@@ -139,15 +139,13 @@ const getLinkToCrawl = (baseUrl) => {
     if (!linkNotVisited) {
         return false;
     }
-
-    return linkNotVisited;
 }
 
 const linksExists = (url, linkList) => {
     return linkList.filter(link => link.url === url).length > 0;
 }
 
-const storeLinkList = (baseUrl, linkList) => {
+function storeLinkList(baseUrl, linkList) {
     const projectName = getProjectName(baseUrl);
 
     try {
@@ -194,9 +192,7 @@ const crawlingProcessStarted = new Date();
 const startCrawlingProcess = async (baseUrl, linkList = null) => {
     const projectConfig = getProjectConfig(baseUrl);
     const baseUrlObj = new URL(baseUrl);
-    const linkToCrawl = linkList.filter(link => link.visited === false)[0];
-    const visitedLinks = linkList.filter(link => link.visited === true);
-    const urlObj = linkToCrawl ? new URL(linkToCrawl.url) : null;
+    const linkToCrawl = linkList.filter(link => link.vl === false)[0];
 
     if (!projectConfig || !linkList || !linkToCrawl) {
         storeLinkList(baseUrl, linkList);
@@ -210,20 +206,21 @@ const startCrawlingProcess = async (baseUrl, linkList = null) => {
         return false;
     }
 
-    printCrawlingStats(baseUrl, linkList, linkToCrawl.url);
+    const visitedLinks = linkList.filter(link => link.vl === true);
+    const linkToCrawlUrlObj = getValidUrl(linkToCrawl.url, baseUrl) ? new URL(getValidUrl(linkToCrawl.url, baseUrl)) : null;
+    const externalLink = linkToCrawlUrlObj.hostname !== baseUrlObj.hostname;
+    const documentLink = isDocumentLink(linkToCrawl.url);
 
+    printCrawlingStats(baseUrl, linkList, linkToCrawl.url);
     try {
         // Constants
-        const response = await axios.get(linkToCrawl.url);
+        const response = await axios.get(linkToCrawlUrlObj.href);
         const responseUrl = response?.request.res.responseUrl || null;
         const responseUrlObj = responseUrl ? new URL(responseUrl) : null;
 
         // Link Checks
-        const redirectLink = urlObj.origin !== responseUrlObj.origin;
-        const externalLink = urlObj.hostname !== baseUrlObj.hostname;
-        const documentLink = isDocumentLink(linkToCrawl.url);
-        const pageAnchor = urlObj.hash ? true : false;
-        const pageAnchorId = urlObj.hash || false;
+        const redirectLink = linkToCrawlUrlObj.origin !== responseUrlObj.origin;
+        const pageAnchorId = linkToCrawlUrlObj.hash || false;
 
         // Variables
         let scrapPage = true;
@@ -235,6 +232,7 @@ const startCrawlingProcess = async (baseUrl, linkList = null) => {
             scrapPage = false;
         }
 
+        // @TODO: Improve the restrict link function name.
         if (
             projectConfig.folderRestriction
             && !isRestrictedLink(urlObj.pathname, baseUrl)
@@ -247,14 +245,14 @@ const startCrawlingProcess = async (baseUrl, linkList = null) => {
             const $ = cheerio.load(response.data);
             const pageLinks = $('a');
 
-            if (pageAnchor) {
+            if (pageAnchorId) {
                 const anchorElement = $(pageAnchorId);
                 missingAnchor = anchorElement.length > 0;
             }
 
             pageLinks.each((index, linkElement) => {
                 const linkHref = $(linkElement).attr('href');
-                const validUrl = getValidUrl($(linkElement).attr('href'), urlObj.href, baseUrl);
+                const validUrl = getValidUrl($(linkElement).attr('href'), baseUrl);
                 const pagesCrawled = linkList.length + linksToCrawl.length;
 
                 if (
@@ -267,12 +265,14 @@ const startCrawlingProcess = async (baseUrl, linkList = null) => {
                     )
                 ) {
                     linksToCrawl.push(getBaseDataObj(validUrl));
+                    linksToCrawl.push(getBaseDataObj(validUrl.replace(baseUrl, '/').replace('//', '/')));
                     internalPageLinks.push(linkHref);
                 }
             });
         }
 
-        // @TODO: move the limit check to a new function.
+        // @TODO: Move the limit check to a new function.
+        // @TODO: Check if is necessary to validate document here.
         if (
             redirectLink
             && !externalLink
@@ -283,45 +283,38 @@ const startCrawlingProcess = async (baseUrl, linkList = null) => {
                 || (projectConfig.pageLimit > 0 && linkList.length + linksToCrawl.length < projectConfig.pageLimit)
             )
         ) {
-            linksToCrawl.push(getBaseDataObj(responseUrl));
+            linksToCrawl.push(getBaseDataObj(responseUrlObj.href.replace(responseUrlObj.origin, '')));
         }
 
         const updatedLinkList = linkList.map(link => {
             if (link.url === linkToCrawl.url) {
                 return {
-                    ...getBaseDataObj(linkToCrawl.url),
-                    responseUrl,
-                    protocol: urlObj.protocol,
-                    visited: true,
-                    statusCode: redirectLink ? 301 : response.status,
-                    externalLink,
-                    documentLink,
-                    pageAnchor,
-                    missingAnchor,
-                    // links: internalPageLinks
+                    ...link,
+                    vl: true,
+                    sc: redirectLink ? 301 : response.status
                 }
             }
 
             return link;
         });
 
+        const newLinkListItems = [...updatedLinkList,...linksToCrawl];
+
         if (visitedLinks.length % 50 === 0) {
-            storeLinkList(baseUrl, [...updatedLinkList,...linksToCrawl]);
+            storeLinkList(baseUrl, newLinkListItems);
         }
 
-        startCrawlingProcess(baseUrl, [...updatedLinkList,...linksToCrawl]);
+        startCrawlingProcess(baseUrl, newLinkListItems);
     } catch (error) {
-        const responseUrl = error.request?.res?.responseUrl || error.config.url;
+        const responseUrl = error.request?.res?.responseUrl || null;
         const statusCode = error?.code === 'ETIMEDOUT' ? 408 : error.status;
 
         const updatedLinkList = linkList.map(link => {
-            if (link.url === error.config.url) {
+            if (link.url === linkToCrawl.url) {
                 return {
-                    ...getBaseDataObj(error.config.url),
-                    responseUrl: responseUrl,
-                    protocol: error.request.protocol,
-                    visited: true,
-                    statusCode: statusCode
+                    ...link,
+                    vl: true,
+                    sc: statusCode
                 }
             }
 
