@@ -132,11 +132,34 @@ function getCrawledLinks(baseUrl) {
     }
 }
 
-const getLinkToCrawl = (baseUrl) => {
-    const linkList = getCrawledLinks(baseUrl) || [];
-    const linkNotVisited = linkList.filter(link => link.visited === false)[0];
+function getCrawledExternalLinks(baseUrl) {
+    try {
+        const projectName = getProjectName(baseUrl);
+        const projectData = fs.readFileSync(`${projectsFolder}/${projectName}/data/external_links.json`,"utf8");
+        const parsedData = JSON.parse(`[${projectData.slice(0, -1)}]`);
 
-    if (!linkNotVisited) {
+        return parsedData.reduce((accumulator, currentValue) => {
+            const alreadyAddedUrl = accumulator.filter((externalLink) => externalLink.url === currentValue.url)[0];
+
+            if (alreadyAddedUrl) {
+                const updatedExternalLink = accumulator.map((externalLink) => {
+                    if (externalLink.url === currentValue.url && !externalLink.referencePages.includes(currentValue.reference)) {
+                        return {
+                            ...externalLink,
+                            referencePages: [...externalLink.referencePages, currentValue.reference]
+                        };
+                    }
+
+                    return externalLink;
+                });
+
+                return updatedExternalLink;
+            }
+
+            return [...accumulator, { url: currentValue.url, referencePages: [currentValue.reference] }];
+        }, []);
+    } catch (error) {
+        console.log(error);
         return false;
     }
 }
@@ -152,6 +175,20 @@ function storeLinkList(baseUrl, linkList) {
         fs.writeFileSync(`${projectsFolder}/${projectName}/data/mapped_links.json`, JSON.stringify(linkList), 'utf8');
         return true;
     } catch (error) {
+        console.log(chalk.white.bgRed('ERROR?'), error)
+        return false;
+    }
+}
+
+function storeExternalLinks(baseUrl, externalLink, referenceLink) {
+    const projectName = getProjectName(baseUrl);
+    const fileData = `{"url":"${externalLink}","reference":"${referenceLink}"},`;
+
+    try {
+        fs.appendFileSync(`${projectsFolder}/${projectName}/data/external_links.json`, fileData, 'utf8');
+        return true;
+    } catch (error) {
+        console.log(chalk.white.bgRed('ERROR?'), error)
         return false;
     }
 }
@@ -264,9 +301,15 @@ const startCrawlingProcess = async (baseUrl, linkList = null) => {
                         || (projectConfig.pageLimit > 0 && pagesCrawled < projectConfig.pageLimit)
                     )
                 ) {
-                    linksToCrawl.push(getBaseDataObj(validUrl));
+                    const validUrlObj = new URL(validUrl);
+                    const _documentLink = isDocumentLink(validUrl);
+
                     linksToCrawl.push(getBaseDataObj(validUrl.replace(baseUrl, '/').replace('//', '/')));
                     internalPageLinks.push(linkHref);
+
+                    if (validUrlObj.hostname !== baseUrlObj.hostname && !_documentLink) {
+                        storeExternalLinks(baseUrl, validUrl, linkToCrawl.url);
+                    }
                 }
             });
         }
@@ -332,5 +375,6 @@ const startCrawlingProcess = async (baseUrl, linkList = null) => {
 module.exports = {
     startCrawlingProcess,
     getCrawledLinks,
+    getCrawledExternalLinks,
     storeLinkList
 }
