@@ -12,9 +12,9 @@ const projectsFolder = './projects';
 const getRunningProjectsConfig = () => {
     try {
         const runningProjectsConfig = fs.readFileSync(`${projectsFolder}/config.json`, 'utf8');
-        return JSON.parse(runningProjectsConfig);
+        return JSON.parse(runningProjectsConfig).filter(project => getProjectConfig(project.baseUrl));
     } catch (error) {
-        return [];
+        return false;
     }
 }
 
@@ -37,19 +37,11 @@ const getProjectPredefinedConfigs = (config) => {
     return predefinedConfigs[config];
 }
 
-const getBaseDataObj = (url) => {
+function getBaseDataObj(url) {
     return {
         'url': url,
-        'responseUrl': null,
-        'protocol': null,
-        'visited': false,
-        'statusCode': null,
-        'externalLink': false,
-        'documentLink': false,
-        'absoluteLink': false,
-        'pageAnchor': false,
-        'missingAnchor': false,
-        'links': [],
+        'vl': false, // vl = Visited Link
+        'sc': null, // sc = Status Code
     }
 }
 
@@ -82,6 +74,10 @@ const getProjectName = (baseUrl) => {
     }
 }
 
+function getParsedFolderRestriction(folderRestriction) {
+    return folderRestriction && folderRestriction.indexOf(',') > -1 ? folderRestriction.split(',') : folderRestriction;
+}
+
 function getProjectBaseListToCraw(baseUrl, folderRestriction) {
     // Always start at home page.
     let projectBaseData = [getBaseDataObj(baseUrl)];
@@ -107,7 +103,7 @@ function getProjectBaseListToCraw(baseUrl, folderRestriction) {
 const getActiveProject = (sessionId) => {
     let runningProjectsConfig = getRunningProjectsConfig();
 
-    if (!runningProjectsConfig || !sessionId) {
+    if (!runningProjectsConfig || runningProjectsConfig.length < 1 || !sessionId) {
         return false;
     }
 
@@ -226,9 +222,9 @@ function setRunningProject(baseUrl, sessionId = false) {
     }
 }
 
-const createProject = (baseUrl, protocol, sessionId, folderRestriction = null, pageLimit = 500, crawlingSpeed = 'fast') => {
-    const folderRestrictionFormatted = folderRestriction && folderRestriction.indexOf(',') > -1 ? folderRestriction.split(',') : folderRestriction;
-    const projectConfig = { baseUrl, protocol, folderRestriction: folderRestrictionFormatted, pageLimit, crawlingSpeed };
+const createProject = (baseUrl, sessionId, folderRestriction = null, pageLimit = 500, crawlingSpeed = 'fast') => {
+    const folderRestrictionFormatted = getParsedFolderRestriction(folderRestriction);
+    const projectConfig = { baseUrl, folderRestriction: folderRestrictionFormatted, pageLimit, crawlingSpeed };
     const projectName = getProjectName(baseUrl);
     const projectBaseData = getProjectBaseListToCraw(baseUrl, folderRestrictionFormatted);
 
@@ -236,16 +232,38 @@ const createProject = (baseUrl, protocol, sessionId, folderRestriction = null, p
         return false;
     }
 
+    // Folders
     const newProjectFolder = `${projectsFolder}/${projectName}`;
-    const newProjectExportsFolder = `${projectsFolder}/${projectName}/exports`;
-    const newProjectConfigFile = `${projectsFolder}/${projectName}/config.json`;
-    const newProjectDataFile = `${projectsFolder}/${projectName}/data.json`;
+    const newProjectExportsFolder = `${newProjectFolder}/exports`;
+    const newProjectImportsFolder = `${newProjectFolder}/imports`;
+
+    // Data Folders
+    const newProjectDataFolder = `${newProjectFolder}/data`;
+
+    // Files
+    const newProjectConfigFile = `${newProjectFolder}/config.json`;
+    const newProjectMappedLinksFile = `${newProjectDataFolder}/mapped_links.json`;
+    const newProjectRedirectLinksFile = `${newProjectDataFolder}/redirect_links.json`;
+    const newProjectInternalDocumentsFile = `${newProjectDataFolder}/internal_documents.json`;
+    const newProjectMissingAnchorsFile = `${newProjectDataFolder}/missing_anchors.json`;
+    const newProjectExternalLinksFile = `${newProjectDataFolder}/external_links.json`;
+    const newProjectExternalDocumentsFile = `${newProjectDataFolder}/external_documents.json`;
 
     try {
+        // Folder Creation
         fs.mkdirSync(newProjectFolder);
         fs.mkdirSync(newProjectExportsFolder);
+        fs.mkdirSync(newProjectImportsFolder);
+        fs.mkdirSync(newProjectDataFolder);
+
+        // File Creation
         fs.writeFileSync(newProjectConfigFile, JSON.stringify(projectConfig), 'utf8');
-        fs.writeFileSync(newProjectDataFile, JSON.stringify(projectBaseData), 'utf8');
+        fs.writeFileSync(newProjectMappedLinksFile, JSON.stringify(projectBaseData), 'utf8');
+        fs.writeFileSync(newProjectRedirectLinksFile, '', 'utf8');
+        fs.writeFileSync(newProjectInternalDocumentsFile, '', 'utf8');
+        fs.writeFileSync(newProjectMissingAnchorsFile, '', 'utf8');
+        fs.writeFileSync(newProjectExternalLinksFile, '', 'utf8');
+        fs.writeFileSync(newProjectExternalDocumentsFile, '', 'utf8');
 
         return true;
     } catch (error) {
@@ -253,15 +271,14 @@ const createProject = (baseUrl, protocol, sessionId, folderRestriction = null, p
     }
 }
 
-const updateProjectConfig = (config, isTempConfig = false) => {
+function updateProjectConfig(config, isTempConfig = false) {
     const projectConfig = getProjectConfig(config.baseUrl);
     const projectName = getProjectName(config.baseUrl);
-    const folderRestrictionFormatted = config.folderRestriction && config.folderRestriction.indexOf(',') > -1 ? config.folderRestriction.split(',') : config.folderRestriction;
+    const folderRestrictionFormatted = getParsedFolderRestriction(config.folderRestriction);
     let tempProjectConfig = {
         ...projectConfig,
         tempConfig: {
             baseUrl: config.baseUrl,
-            protocol: config.protocol,
             sessionId: config.sessionId,
             folderRestriction: folderRestrictionFormatted,
             pageLimit: config.pageLimit,
@@ -290,6 +307,7 @@ const updateProjectConfig = (config, isTempConfig = false) => {
 const resetProject = (baseUrl) => {
     const projectConfig = getProjectConfig(baseUrl);
     const projectName = getProjectName(baseUrl);
+    const projectDataFolder = `${projectsFolder}/${projectName}/data`;
 
     if (!projectConfig) {
         return false;
@@ -298,7 +316,12 @@ const resetProject = (baseUrl) => {
     const projectBaseData = getProjectBaseListToCraw(baseUrl, projectConfig.folderRestriction);
 
     try {
-        fs.writeFileSync(`${projectsFolder}/${projectName}/data.json`, JSON.stringify(projectBaseData), 'utf8');
+        fs.writeFileSync(`${projectDataFolder}/mapped_links.json`, JSON.stringify(projectBaseData), 'utf8');
+        fs.writeFileSync(`${projectDataFolder}/redirect_links.json`, '', 'utf8');
+        fs.writeFileSync(`${projectDataFolder}/internal_documents.json`, '', 'utf8');
+        fs.writeFileSync(`${projectDataFolder}/missing_anchors.json`, '', 'utf8');
+        fs.writeFileSync(`${projectDataFolder}/external_links.json`, '', 'utf8');
+        fs.writeFileSync(`${projectDataFolder}/external_documents.json`, '', 'utf8');
         return true;
     } catch (error) {
         return false;

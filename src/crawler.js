@@ -125,7 +125,7 @@ const getValidUrl = (url, urlOrigin, baseUrl) => {
 const getCrawledLinks = (baseUrl) => {
     try {
         const projectName = getProjectName(baseUrl);
-        const projectData = fs.readFileSync(`${projectsFolder}/${projectName}/data.json`, 'utf8');
+        const projectData = fs.readFileSync(`${projectsFolder}/${projectName}/data/mapped_links.json`, 'utf8');
         return JSON.parse(projectData);
     } catch (error) {
         return false;
@@ -151,7 +151,7 @@ const storeLinkList = (baseUrl, linkList) => {
     const projectName = getProjectName(baseUrl);
 
     try {
-        fs.writeFileSync(`${projectsFolder}/${projectName}/data.json`, JSON.stringify(linkList), 'utf8');
+        fs.writeFileSync(`${projectsFolder}/${projectName}/data/mapped_links.json`, JSON.stringify(linkList), 'utf8');
         return true;
     } catch (error) {
         return false;

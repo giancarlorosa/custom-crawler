@@ -47,9 +47,9 @@ function getProjectVerification() {
     const projectName = activeProject ? getProjectName(activeProject.baseUrl) : null;
     const tempProjectConfig = projectConfig ? getTempProjectConfig(activeProject.baseUrl, sessionId) : null;
     const crawledLinks = activeProject ? getCrawledLinks(activeProject.baseUrl) : null;
-    const visitedLinks = crawledLinks ? crawledLinks.filter(link => link.visited === true) : null;
-    const notVisitedLinks = crawledLinks ? crawledLinks.filter(link => link.visited === false) : null;
-    const linksWithError = visitedLinks ? visitedLinks.filter(link => link.statusCode !== 200 && link.statusCode !== 301) : null;
+    const visitedLinks = crawledLinks ? crawledLinks.filter(link => link.vl === true) : null;
+    const notVisitedLinks = crawledLinks ? crawledLinks.filter(link => link.vl === false) : null;
+    const linksWithError = visitedLinks ? visitedLinks.filter(link => link.sc !== 200 && link.sc !== 301) : null;
 
     // Verifications
     const hasActiveProject = activeProject ? true :  false;
@@ -104,6 +104,10 @@ function printProjectConfig(configType = null) {
         notVisitedLinks
     } = getProjectVerification();
 
+    if (!projectConfig || !activeProject) {
+        return false;
+    }
+
     const projectConfigCheck = tempProjectConfig && configType === 'update' ? tempProjectConfig : projectConfig;
     let projectConfigDisplay = typeof projectConfigCheck.folderRestriction === 'string' ? projectConfigCheck : { ...projectConfigCheck, folderRestriction: 'None'};
     let runningProjectFootnotes = [];
@@ -140,7 +144,6 @@ function printProjectConfig(configType = null) {
 
         projectConfigDisplay = {
             'Base URL': projectConfigCheck.baseUrl,
-            'Protocol': projectConfigCheck.protocol.replace(':', ''),
             'Crawling limit': projectConfigCheck.pageLimit === 0 ? 'Unlimited' : projectConfigCheck.pageLimit,
             'Crawling speed': projectConfigCheck.crawlingSpeed,
             'Folder restrictions rules': folderRestrictions.length,
@@ -547,7 +550,6 @@ async function configureProjectStep(baseUrl = null) {
 
     const projectCurrentConfig = {
         baseUrl: localBaseUrl,
-        protocol: localBaseUrl.slice(0, localBaseUrl.indexOf(':')),
         folderRestriction: configureProjectResult.folderRestriction,
         pageLimit: preDefinedConfigs ? preDefinedConfigs.pageLimit : configureProjectResult.pageLimit,
         crawlingSpeed: preDefinedConfigs ? preDefinedConfigs.crawlingSpeed : configureProjectResult.crawlingSpeed,
@@ -571,7 +573,6 @@ async function configureProjectStep(baseUrl = null) {
     if (!baseUrl) {
         updateProjectConfig({
             baseUrl: projectCurrentConfig.baseUrl,
-            protocol: projectCurrentConfig.protocol,
             sessionId: sessionId,
             folderRestriction: projectCurrentConfig.folderRestriction,
             pageLimit: projectCurrentConfig.pageLimit,
@@ -580,7 +581,6 @@ async function configureProjectStep(baseUrl = null) {
     } else {
         createProject(
             projectCurrentConfig.baseUrl,
-            projectCurrentConfig.protocol,
             sessionId,
             projectCurrentConfig.folderRestriction,
             projectCurrentConfig.pageLimit,
