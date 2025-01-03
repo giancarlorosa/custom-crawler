@@ -132,10 +132,10 @@ function getCrawledLinks(baseUrl) {
     }
 }
 
-function getCrawledExternalLinks(baseUrl) {
+function getCrawledDataLinks(baseUrl, dataType) {
     try {
         const projectName = getProjectName(baseUrl);
-        const projectData = fs.readFileSync(`${projectsFolder}/${projectName}/data/external_links.json`,"utf8");
+        const projectData = fs.readFileSync(`${projectsFolder}/${projectName}/data/${dataType}.json`,"utf8");
         const parsedData = JSON.parse(`[${projectData.slice(0, -1)}]`);
 
         return parsedData.reduce((accumulator, currentValue) => {
@@ -168,7 +168,7 @@ const linksExists = (url, linkList) => {
     return linkList.filter(link => link.url === url).length > 0;
 }
 
-function storeLinkList(baseUrl, linkList) {
+function storeMappedLinks(baseUrl, linkList) {
     const projectName = getProjectName(baseUrl);
 
     try {
@@ -180,12 +180,25 @@ function storeLinkList(baseUrl, linkList) {
     }
 }
 
-function storeExternalLinks(baseUrl, externalLink, referenceLink) {
+function storeDataLinks(baseUrl, url, referenceLink, dataType) {
     const projectName = getProjectName(baseUrl);
-    const fileData = `{"url":"${externalLink}","reference":"${referenceLink}"},`;
+    const fileData = `{"url":"${url}","reference":"${referenceLink}"},`;
 
     try {
-        fs.appendFileSync(`${projectsFolder}/${projectName}/data/external_links.json`, fileData, 'utf8');
+        fs.appendFileSync(`${projectsFolder}/${projectName}/data/${dataType}.json`, fileData, 'utf8');
+        return true;
+    } catch (error) {
+        console.log(chalk.white.bgRed('ERROR?'), error)
+        return false;
+    }
+}
+
+function storeRedirectLinks(baseUrl, url, responseUrl) {
+    const projectName = getProjectName(baseUrl);
+    const fileData = `{"url":"${url}","response":"${responseUrl}"},`;
+
+    try {
+        fs.appendFileSync(`${projectsFolder}/${projectName}/data/redirect_links.json`, fileData, 'utf8');
         return true;
     } catch (error) {
         console.log(chalk.white.bgRed('ERROR?'), error)
@@ -198,9 +211,9 @@ function printCrawlingStats(baseUrl, linkList, testingLink = null, processedTime
         return false;
     }
 
-    const visitedLinks = linkList.filter(link => link.visited === true);
-    const notVisitedLinks = linkList.filter(link => link.visited === false);
-    const linksWithError = linkList.filter(link => link.statusCode !== 200 && link.statusCode !== 301 && link.visited === true);
+    const visitedLinks = linkList.filter(link => link.vl === true);
+    const notVisitedLinks = linkList.filter(link => link.vl === false);
+    const linksWithError = linkList.filter(link => link.sc !== 200 && link.sc !== 301 && link.vl === true);
 
     let title = `Running crawling process for ${baseUrl}`;
     let message = chalk.bold("Testing url: ") + testingLink;
@@ -232,7 +245,7 @@ const startCrawlingProcess = async (baseUrl, linkList = null) => {
     const linkToCrawl = linkList.filter(link => link.vl === false)[0];
 
     if (!projectConfig || !linkList || !linkToCrawl) {
-        storeLinkList(baseUrl, linkList);
+        storeMappedLinks(baseUrl, linkList);
 
         const crawlingProcessEnded = new Date();
         const diffMs = (crawlingProcessEnded - crawlingProcessStarted)
@@ -249,14 +262,15 @@ const startCrawlingProcess = async (baseUrl, linkList = null) => {
     const documentLink = isDocumentLink(linkToCrawl.url);
 
     printCrawlingStats(baseUrl, linkList, linkToCrawl.url);
+
     try {
         // Constants
-        const response = await axios.get(linkToCrawlUrlObj.href);
+        const response = await axios.get(linkToCrawlUrlObj.href, { timeout: 15000 });
         const responseUrl = response?.request.res.responseUrl || null;
         const responseUrlObj = responseUrl ? new URL(responseUrl) : null;
 
         // Link Checks
-        const redirectLink = linkToCrawlUrlObj.origin !== responseUrlObj.origin;
+        const redirectLink = linkToCrawlUrlObj.href !== responseUrlObj.href;
         const pageAnchorId = linkToCrawlUrlObj.hash || false;
 
         // Variables
@@ -265,7 +279,7 @@ const startCrawlingProcess = async (baseUrl, linkList = null) => {
         let linksToCrawl = [];
         let internalPageLinks = [];
 
-        if (externalLink || documentLink) {
+        if (externalLink || documentLink || redirectLink) {
             scrapPage = false;
         }
 
@@ -301,32 +315,56 @@ const startCrawlingProcess = async (baseUrl, linkList = null) => {
                         || (projectConfig.pageLimit > 0 && pagesCrawled < projectConfig.pageLimit)
                     )
                 ) {
+                    const validInternalLink = validUrl.replace(baseUrl, '/').replace('//', '/');
                     const validUrlObj = new URL(validUrl);
+                    const _externalLink = validUrlObj.hostname !== baseUrlObj.hostname;
                     const _documentLink = isDocumentLink(validUrl);
+                    let dataType = null;
 
-                    linksToCrawl.push(getBaseDataObj(validUrl.replace(baseUrl, '/').replace('//', '/')));
+                    linksToCrawl.push(getBaseDataObj(validInternalLink));
                     internalPageLinks.push(linkHref);
 
-                    if (validUrlObj.hostname !== baseUrlObj.hostname && !_documentLink) {
-                        storeExternalLinks(baseUrl, validUrl, linkToCrawl.url);
+                    switch(true) {
+                        case (_externalLink && !_documentLink):
+                            dataType = 'external_links';
+                            break;
+                        case (_externalLink && _documentLink):
+                            dataType = 'external_documents';
+                            break;
+                        case (!_externalLink && !_documentLink):
+                            dataType = 'internal_links';
+                            break;
+                        case (!_externalLink && _documentLink):
+                            dataType = 'internal_documents';
+                            break;
+                        default:
+                            dataType = null;
+                            break;
+                    }
+
+                    if (dataType) {
+                        storeDataLinks(baseUrl, validInternalLink, linkToCrawl.url, dataType);
+                    }
+
+                    if (linkHref.includes(baseUrl)) {
+                        storeDataLinks(baseUrl, linkHref, linkToCrawl.url, 'absolute_links');
                     }
                 }
             });
         }
 
         // @TODO: Move the limit check to a new function.
-        // @TODO: Check if is necessary to validate document here.
         if (
             redirectLink
             && !externalLink
-            && !documentLink
             && !linksExists(responseUrl, linkList)
             && (
-                (projectConfig.pageLimit === 0 && linkList.length + linksToCrawl.length < 5000) // Safety limit
+                (projectConfig.pageLimit === 0 && linkList.length + linksToCrawl.length < 100000) // Safety limit
                 || (projectConfig.pageLimit > 0 && linkList.length + linksToCrawl.length < projectConfig.pageLimit)
             )
         ) {
             linksToCrawl.push(getBaseDataObj(responseUrlObj.href.replace(responseUrlObj.origin, '')));
+            storeRedirectLinks(baseUrl, linkToCrawlUrlObj.pathname, responseUrlObj.pathname);
         }
 
         const updatedLinkList = linkList.map(link => {
@@ -344,7 +382,7 @@ const startCrawlingProcess = async (baseUrl, linkList = null) => {
         const newLinkListItems = [...updatedLinkList,...linksToCrawl];
 
         if (visitedLinks.length % 50 === 0) {
-            storeLinkList(baseUrl, newLinkListItems);
+            storeMappedLinks(baseUrl, newLinkListItems);
         }
 
         startCrawlingProcess(baseUrl, newLinkListItems);
@@ -365,7 +403,7 @@ const startCrawlingProcess = async (baseUrl, linkList = null) => {
         });
 
         if (visitedLinks.length % 50 === 0) {
-            storeLinkList(baseUrl, updatedLinkList);
+            storeMappedLinks(baseUrl, updatedLinkList);
         }
 
         startCrawlingProcess(baseUrl, updatedLinkList);
@@ -375,6 +413,6 @@ const startCrawlingProcess = async (baseUrl, linkList = null) => {
 module.exports = {
     startCrawlingProcess,
     getCrawledLinks,
-    getCrawledExternalLinks,
-    storeLinkList
+    getCrawledDataLinks,
+    storeMappedLinks
 }

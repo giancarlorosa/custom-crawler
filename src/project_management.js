@@ -244,8 +244,9 @@ const createProject = (baseUrl, sessionId, folderRestriction = null, pageLimit =
     const newProjectConfigFile = `${newProjectFolder}/config.json`;
     const newProjectMappedLinksFile = `${newProjectDataFolder}/mapped_links.json`;
     const newProjectRedirectLinksFile = `${newProjectDataFolder}/redirect_links.json`;
+    const newProjectAbsoluteLinksFile = `${newProjectDataFolder}/absolute_links.json`;
+    const newProjectInternalLinksFile = `${newProjectDataFolder}/internal_links.json`;
     const newProjectInternalDocumentsFile = `${newProjectDataFolder}/internal_documents.json`;
-    const newProjectMissingAnchorsFile = `${newProjectDataFolder}/missing_anchors.json`;
     const newProjectExternalLinksFile = `${newProjectDataFolder}/external_links.json`;
     const newProjectExternalDocumentsFile = `${newProjectDataFolder}/external_documents.json`;
 
@@ -260,8 +261,9 @@ const createProject = (baseUrl, sessionId, folderRestriction = null, pageLimit =
         fs.writeFileSync(newProjectConfigFile, JSON.stringify(projectConfig), 'utf8');
         fs.writeFileSync(newProjectMappedLinksFile, JSON.stringify(projectBaseData), 'utf8');
         fs.writeFileSync(newProjectRedirectLinksFile, '', 'utf8');
+        fs.writeFileSync(newProjectAbsoluteLinksFile, '', 'utf8');
+        fs.writeFileSync(newProjectInternalLinksFile, '', 'utf8');
         fs.writeFileSync(newProjectInternalDocumentsFile, '', 'utf8');
-        fs.writeFileSync(newProjectMissingAnchorsFile, '', 'utf8');
         fs.writeFileSync(newProjectExternalLinksFile, '', 'utf8');
         fs.writeFileSync(newProjectExternalDocumentsFile, '', 'utf8');
 
@@ -318,8 +320,9 @@ const resetProject = (baseUrl) => {
     try {
         fs.writeFileSync(`${projectDataFolder}/mapped_links.json`, JSON.stringify(projectBaseData), 'utf8');
         fs.writeFileSync(`${projectDataFolder}/redirect_links.json`, '', 'utf8');
+        fs.writeFileSync(`${projectDataFolder}/absolute_links.json`, '', 'utf8');
+        fs.writeFileSync(`${projectDataFolder}/internal_links.json`, '', 'utf8');
         fs.writeFileSync(`${projectDataFolder}/internal_documents.json`, '', 'utf8');
-        fs.writeFileSync(`${projectDataFolder}/missing_anchors.json`, '', 'utf8');
         fs.writeFileSync(`${projectDataFolder}/external_links.json`, '', 'utf8');
         fs.writeFileSync(`${projectDataFolder}/external_documents.json`, '', 'utf8');
         return true;

@@ -25,7 +25,7 @@ const {
 } = require('./utils');
 const {
     getCrawledLinks,
-    storeLinkList,
+    storeMappedLinks,
     startCrawlingProcess
 } = require('./crawler');
 const {
@@ -618,7 +618,7 @@ async function confirmConfigurationStep(baseUrl) {
             });
 
             updateProjectConfig(tempProjectConfig);
-            storeLinkList(tempProjectConfig.baseUrl, [
+            storeMappedLinks(tempProjectConfig.baseUrl, [
                 ...crawledLinks,
                 ...notIncludedLinks
             ])
