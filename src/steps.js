@@ -30,7 +30,6 @@ const {
 } = require('./crawler');
 const {
     printFilterStats,
-    printFilterComplete,
     exportFilteredData,
     filterLinksWithError,
     filterDocumentsWithError,
@@ -690,8 +689,7 @@ async function removeProjectStep() {
 
 async function filterDataStep() {
     const { activeProject } = getProjectVerification();
-    let selectedFilter = '';
-    let linkList = [];
+    let filteredData = undefined;
 
     const filterDataPrompt = [
         {
@@ -703,15 +701,6 @@ async function filterDataStep() {
                 { title: 'Documents with error', description: 'Get all documents links error.', value: 'documentError' },
                 { title: 'Missing anchors', description: 'Get all pages with missing anchor.', value: 'anchorError' },
             ]
-        },
-        {
-            type: 'select',
-            name: 'print',
-            message: 'How you would like to check this data?',
-            choices: [
-                { title: 'Resumed stats', description: 'Print a resumed result status.', value: 'resumed' },
-                { title: 'Show all registers', description: 'Print all registers in the screen.', value: 'complete' },
-            ]
         }
     ];
 
@@ -719,34 +708,23 @@ async function filterDataStep() {
 
     switch(filterDataResult?.filter) {
         case 'linkError':
-            linkList = filterLinksWithError(activeProject.baseUrl);
-            selectedFilter = 'Links with error - WITHOUT documents';
+            filteredData = filterLinksWithError(activeProject.baseUrl);
             break;
         case 'documentError':
-            linkList = filterDocumentsWithError(activeProject.baseUrl);
-            selectedFilter = 'Document links with error';
+            filteredData = filterDocumentsWithError(activeProject.baseUrl);
             break;
         case 'anchorError':
-            linkList = filterAnchorsWithError(activeProject.baseUrl);
+            filteredData = filterAnchorsWithError(activeProject.baseUrl);
             selectedFilter = 'Pages with missing anchors';
             break;
     }
 
-    switch(filterDataResult?.print) {
-        case 'resumed':
-            printFilterStats(activeProject.baseUrl, selectedFilter, linkList);
-            break
-        case 'complete':
-            printFilterComplete(activeProject.baseUrl, selectedFilter, linkList);
-            break
-    }
-
-    await new Promise(resolve => setTimeout(resolve, 4000));
-    return exportFilteredDataStep(linkList, selectedFilter);
+    printFilterStats(activeProject.baseUrl, filteredData.title, filteredData.total);
+    return exportFilteredDataStep(filteredData.exportData, filteredData.title);
 }
 
 async function exportFilteredDataStep(data, fileName) {
-    if (!fileName || !Array.isArray(data) || data.length < 1) {
+    if (!fileName || !data) {
         return firstStep();
     }
 

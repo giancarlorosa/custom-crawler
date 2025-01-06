@@ -12,33 +12,7 @@ const {
     getProjectConfig,
     getBaseDataObj
 } = require('./project_management.js');
-const { boxedInfoMessage } = require('./utils.js');
-
-const isDocumentLink = (url) => {
-    const documentExtensions = [
-        // Document files
-        '.doc',
-        '.docx',
-        '.txt',
-        '.pdf',
-        // Spreadsheet files
-        '.csv',
-        '.ods',
-        '.xls',
-        '.xlsx',
-        //Audio and video files
-        '.aif',
-        '.mov',
-        '.mp3',
-        '.mp4',
-        '.mpg',
-        '.wav',
-        '.wma',
-        '.wmv'
-    ];
-
-    return documentExtensions.indexOf(url.slice(url.lastIndexOf('.'))) > -1;
-}
+const { boxedInfoMessage, isDocumentLink } = require('./utils.js');
 
 const isRestrictedLink = (pathname, baseUrl) => {
     const projectConfig = getProjectConfig(baseUrl);
@@ -315,7 +289,7 @@ const startCrawlingProcess = async (baseUrl, linkList = null) => {
                         || (projectConfig.pageLimit > 0 && pagesCrawled < projectConfig.pageLimit)
                     )
                 ) {
-                    const validInternalLink = validUrl.replace(baseUrl, '/').replace('//', '/');
+                    const validInternalLink = validUrl.replace(baseUrl, '/').replace('://', ':///').replace('//', '/');
                     const validUrlObj = new URL(validUrl);
                     const _externalLink = validUrlObj.hostname !== baseUrlObj.hostname;
                     const _documentLink = isDocumentLink(validUrl);
@@ -414,5 +388,6 @@ module.exports = {
     startCrawlingProcess,
     getCrawledLinks,
     getCrawledDataLinks,
+    getValidUrl,
     storeMappedLinks
 }

@@ -106,9 +106,36 @@ const boxedConfigMessage = (title, configs, footerNote = null, marginTop = false
     );
 }
 
+const isDocumentLink = (url) => {
+    const documentExtensions = [
+        // Document files
+        '.doc',
+        '.docx',
+        '.txt',
+        '.pdf',
+        // Spreadsheet files
+        '.csv',
+        '.ods',
+        '.xls',
+        '.xlsx',
+        //Audio and video files
+        '.aif',
+        '.mov',
+        '.mp3',
+        '.mp4',
+        '.mpg',
+        '.wav',
+        '.wma',
+        '.wmv'
+    ];
+
+    return documentExtensions.indexOf(url.slice(url.lastIndexOf('.'))) > -1;
+}
+
 module.exports = {
     boxedMessage,
     boxedInfoMessage,
     boxedConfigMessage,
+    isDocumentLink,
     getSessionId
 }

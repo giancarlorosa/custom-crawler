@@ -3,19 +3,23 @@ const fs = require('node:fs');
 const chalk = require('chalk');
 
 // Custom modules
-const { getCrawledLinks } = require('./crawler');
-const { boxedInfoMessage } = require('./utils');
+const { getCrawledLinks, getCrawledDataLinks, getValidUrl } = require('./crawler');
+const { boxedInfoMessage, isDocumentLink } = require('./utils');
 const { projectsFolder, getProjectName } = require('./project_management');
 
-function printFilterStats(baseUrl, filter, linkList) {
+function printFilterStats(baseUrl, filterTitle, resultsCount) {
     let message = [];
     message.push(`Project: ${chalk.bold.cyanBright(baseUrl)}`);
-    message.push(`Selected filter: ${chalk.bold.cyanBright(filter)}`);
+    message.push(`Selected filter: ${chalk.bold.cyanBright(filterTitle)}`);
+
+    let footerNotes = [];
+    footerNotes.push(`Links with Issue: ${chalk.bold.yellowBright(resultsCount.issues)}`);
+    footerNotes.push(`Pages with Issue: ${chalk.bold.yellowBright(resultsCount.pages)}`);
 
     console.log(boxedInfoMessage(
         'Printing crawler stats for the following project',
         message.join("\n"),
-        'Registers found: ' + chalk.bold.yellowBright(linkList.length),
+        footerNotes.join("\n"),
         {
             type: 'info',
             marginTop: true,
@@ -24,46 +28,14 @@ function printFilterStats(baseUrl, filter, linkList) {
     ));
 }
 
-function printFilterComplete(baseUrl, filter, linkList) {
-    const terminalWidthSize = process.stdout.columns;
-    let fullWidthLine = [];
-
-    for (let i = 0; i < terminalWidthSize; i++) {
-        fullWidthLine.push('');
-    }
-
-    if (linkList.length > 0) {
-        console.log("\n");
-    }
-
-    linkList.forEach(link => {
-        console.log(chalk.yellowBright(fullWidthLine.join('=')));
-        console.log(chalk.bold.cyanBright('URL: ') + link.urlDestination);
-        console.log(fullWidthLine.join('-'));
-
-        if (link.urlOrigin) {
-            console.log(chalk.bold.cyanBright('Origin: ') + link.urlOrigin);
-        }
-    });
-
-    if (linkList.length > 0) {
-        console.log(chalk.yellowBright(fullWidthLine.join('=')));
-    }
-
-    printFilterStats(baseUrl, filter, linkList);
-}
-
-function exportFilteredData(baseUrl, linkList, fileName) {
-    if (!fileName || !Array.isArray(linkList) || linkList.length < 1) {
+function exportFilteredData(baseUrl, data, fileName) {
+    if (!fileName || !data) {
         return false;
     }
 
-    const projectName = getProjectName(baseUrl);
-    const fileHeader = ["URL;Origin"];
-    const linkListFormatted = linkList.map(link => `${link.urlDestination};${link.urlOrigin}`);
-
     try {
-        fs.writeFileSync(`./${projectsFolder}/${projectName}/exports/${fileName}.csv`, [...fileHeader, ...linkListFormatted].join("\n"), 'utf8');
+        const projectName = getProjectName(baseUrl);
+        fs.writeFileSync(`./${projectsFolder}/${projectName}/exports/${fileName}.csv`, data, 'utf8');
         return true;
     } catch (error) {
         return false;
@@ -71,41 +43,81 @@ function exportFilteredData(baseUrl, linkList, fileName) {
 }
 
 function filterLinksWithError(baseUrl) {
-    const linkList = getCrawledLinks(baseUrl);
+    const mappedLinks = getCrawledLinks(baseUrl);
+    const internalLinks = getCrawledDataLinks(baseUrl, 'internal_links');
+    const externalLinks = getCrawledDataLinks(baseUrl, 'external_links');
+    const linksToMap = [...internalLinks, ...externalLinks];
+    const filteredData = mappedLinks.filter(link =>
+        link.sc !== 200
+        && link.sc !== 301
+        && link.vl === true
+        && !isDocumentLink(link.url)
+    )
 
-    return linkList
-        .filter(link =>
-            link.statusCode !== 200
-            && link.statusCode !== 301
-            && link.documentLink === false
-            && link.visited === true
-        )
-        .map(link => {
-            return {
-                urlDestination: link.responseUrl,
-                urlOrigin: link.url,
-                statusCode: link.statusCode
+    const foundLinks = filteredData.map(link => link.url);
+    const dataToExport = linksToMap.reduce((accumulator, currentItem) => {
+        let linksTpExport = accumulator;
+        if (foundLinks.includes(currentItem.url)) {
+            const mappedLinkItem = mappedLinks.filter(link => link.url === currentItem.url)[0];
+
+            if (mappedLinkItem) {
+                currentItem.referencePages.forEach(referenceUrl => {
+                    linksTpExport.push(`${getValidUrl(referenceUrl, baseUrl)};${mappedLinkItem.url};${mappedLinkItem.sc}`);
+                })
             }
-        });
+        }
+
+        return linksTpExport;
+    }, []);
+
+    return {
+        title: 'Links with error - WITHOUT documents',
+        data: filteredData,
+        exportData: `Page Location;URL with Issue;Status\n${dataToExport.join("\n")}`,
+        total: {
+            issues: filteredData.length,
+            pages: dataToExport.length
+        },
+    };
 }
 
 function filterDocumentsWithError(baseUrl) {
-    const linkList = getCrawledLinks(baseUrl);
+    const mappedLinks = getCrawledLinks(baseUrl);
+    const internalLinks = getCrawledDataLinks(baseUrl, 'internal_documents');
+    const externalLinks = getCrawledDataLinks(baseUrl, 'external_documents');
+    const linksToMap = [...internalLinks, ...externalLinks];
+    const filteredData = mappedLinks.filter(link =>
+        link.sc !== 200
+        && link.sc !== 301
+        && link.vl === true
+        && isDocumentLink(link.url)
+    )
 
-    return linkList
-        .filter(link =>
-            link.statusCode !== 200
-            && link.statusCode !== 301
-            && link.documentLink === true
-            && link.visited === true
-        )
-        .map(link => {
-            return {
-                urlDestination: link.responseUrl,
-                urlOrigin: link.url,
-                statusCode: link.statusCode
+    const foundLinks = filteredData.map(link => link.url);
+    const dataToExport = linksToMap.reduce((accumulator, currentItem) => {
+        let linksTpExport = accumulator;
+        if (foundLinks.includes(currentItem.url)) {
+            const mappedLinkItem = mappedLinks.filter(link => link.url === currentItem.url)[0];
+
+            if (mappedLinkItem) {
+                currentItem.referencePages.forEach(referenceUrl => {
+                    linksTpExport.push(`${getValidUrl(referenceUrl, baseUrl)};${mappedLinkItem.url};${mappedLinkItem.sc}`);
+                })
             }
-        });
+        }
+
+        return linksTpExport;
+    }, []);
+
+    return {
+        title: 'Document links with error',
+        data: filteredData,
+        exportData: `Page Location;URL with Issue;Status\n${dataToExport.join("\n")}`,
+        total: {
+            issues: filteredData.length,
+            pages: dataToExport.length
+        },
+    };
 }
 
 function filterAnchorsWithError(baseUrl) {
@@ -127,7 +139,6 @@ function filterAnchorsWithError(baseUrl) {
 
 module.exports = {
     printFilterStats,
-    printFilterComplete,
     exportFilteredData,
     filterLinksWithError,
     filterDocumentsWithError,
