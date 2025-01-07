@@ -260,7 +260,7 @@ const startCrawlingProcess = async (baseUrl, linkList = null) => {
         // @TODO: Improve the restrict link function name.
         if (
             projectConfig.folderRestriction
-            && !isRestrictedLink(urlObj.pathname, baseUrl)
+            && !isRestrictedLink(linkToCrawlUrlObj.pathname, baseUrl)
             && !isRestrictedLink(responseUrlObj.pathname, baseUrl)
         ) {
             scrapPage = false;
@@ -277,26 +277,26 @@ const startCrawlingProcess = async (baseUrl, linkList = null) => {
 
             pageLinks.each((index, linkElement) => {
                 const linkHref = $(linkElement).attr('href');
-                const validUrl = getValidUrl($(linkElement).attr('href'), baseUrl);
+                const validUrl = getValidUrl(linkHref, baseUrl);
                 const pagesCrawled = linkList.length + linksToCrawl.length;
+                const validInternalLink = validUrl ? validUrl.replace(baseUrl, '/').replace('://', ':///').replace('//', '/') : null;
 
                 if (
                     validUrl
-                    && !linksExists(validUrl, linkList)
-                    && !internalPageLinks.includes(linkHref)
+                    && !linksExists(validInternalLink, linkList)
+                    && !internalPageLinks.includes(validInternalLink)
                     && (
                         (projectConfig.pageLimit === 0 && pagesCrawled < 5000) // Safety limit
                         || (projectConfig.pageLimit > 0 && pagesCrawled < projectConfig.pageLimit)
                     )
                 ) {
-                    const validInternalLink = validUrl.replace(baseUrl, '/').replace('://', ':///').replace('//', '/');
                     const validUrlObj = new URL(validUrl);
                     const _externalLink = validUrlObj.hostname !== baseUrlObj.hostname;
                     const _documentLink = isDocumentLink(validUrl);
                     let dataType = null;
 
                     linksToCrawl.push(getBaseDataObj(validInternalLink));
-                    internalPageLinks.push(linkHref);
+                    internalPageLinks.push(validInternalLink);
 
                     switch(true) {
                         case (_externalLink && !_documentLink):

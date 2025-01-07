@@ -83,15 +83,19 @@ function getProjectBaseListToCraw(baseUrl, folderRestriction) {
     let projectBaseData = [getBaseDataObj('/')];
 
     if (folderRestriction && typeof folderRestriction === 'string' && folderRestriction.slice(0, 1) !== '!') {
-        projectBaseData.push(getBaseDataObj(folderRestriction.replace('/*', '')));
+        const restrictionFolder = folderRestriction.trim().replace('/*', '');
+
+        if (restrictionFolder !== '' && restrictionFolder !== '/') {
+            projectBaseData.push(getBaseDataObj(folderRestriction.replace('/*', '')));
+        }
     }
 
     if (folderRestriction && Array.isArray(folderRestriction)) {
         folderRestriction.forEach(restriction => {
             const restrictionFolder = restriction.trim().replace('/*', '');
-            const restrictionExists = projectBaseData.filter(project => project.url === baseUrl + restrictionFolder).length > 0;
+            const restrictionExists = projectBaseData.filter(project => project.url === restrictionFolder).length > 0;
 
-            if (restrictionFolder.slice(0, 1) !== '!' && !restrictionExists) {
+            if (restrictionFolder.slice(0, 1) !== '!' && !restrictionExists && restrictionFolder !== '') {
                 projectBaseData.push(getBaseDataObj(restrictionFolder));
             }
         });
