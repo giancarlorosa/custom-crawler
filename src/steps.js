@@ -699,7 +699,6 @@ async function filterDataStep() {
             choices: [
                 { title: 'Links with error', description: 'Get all links with error, NOT including documents.', value: 'linkError' },
                 { title: 'Documents with error', description: 'Get all documents links error.', value: 'documentError' },
-                { title: 'Missing anchors', description: 'Get all pages with missing anchor.', value: 'anchorError' },
             ]
         }
     ];
@@ -712,10 +711,6 @@ async function filterDataStep() {
             break;
         case 'documentError':
             filteredData = filterDocumentsWithError(activeProject.baseUrl);
-            break;
-        case 'anchorError':
-            filteredData = filterAnchorsWithError(activeProject.baseUrl);
-            selectedFilter = 'Pages with missing anchors';
             break;
     }
 
