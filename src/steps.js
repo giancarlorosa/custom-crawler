@@ -144,9 +144,14 @@ function printProjectConfig(configType = null) {
         projectConfigDisplay = {
             'Base URL': projectConfigCheck.baseUrl,
             'Crawling limit': projectConfigCheck.pageLimit === 0 ? 'Unlimited' : projectConfigCheck.pageLimit,
-            'Crawling speed': projectConfigCheck.crawlingSpeed,
             'Folder restrictions rules': folderRestrictions.length,
             ...folderRestrictionsObj
+        }
+    } else {
+        projectConfigDisplay = {
+            'Base URL': projectConfigCheck.baseUrl,
+            'Crawling limit': projectConfigCheck.pageLimit === 0 ? 'Unlimited' : projectConfigCheck.pageLimit,
+            'Folder restrictions': projectConfigCheck?.folderRestriction || 'None'
         }
     }
 
@@ -162,6 +167,8 @@ function printProjectConfig(configType = null) {
         if (linksWithError.length > 0) {
             runningProjectFootnotes.push(`Links with error: ${chalk.bold.redBright(linksWithError.length)}`)
         }
+
+        console.log(projectConfigDisplay)
 
         console.log(boxedConfigMessage(
             boxTitle,
@@ -511,33 +518,11 @@ async function configureProjectStep(baseUrl = null) {
             initial: !baseUrl && projectConfig?.folderRestriction ? projectConfig.folderRestriction : ''
         },
         {
-            type: (prev, values) => baseUrl ? 'select' : null,
-            name: 'configType',
-            message: 'How would you like to configure your project?',
-            choices: [
-                { title: 'Use configuration tool', description: 'Some questions will be present to you to configure the project.', value: 'manual' },
-                { title: 'Use default settings for small websites', description: 'Designed for websites with lass than 100 pages (Fast crawling speed).', value: 'small' },
-                { title: 'Use default settings for medium websites', description: 'Designed for websites with between 100 to 500 pages (Medium crawling speed).', value: 'medium' },
-                { title: 'Use default settings for large websites', description: 'Designed for websites with with more than 500 pages (Slow crawling speed).', value: 'large' },
-            ]
-        },
-        {
-            type: (prev, values) => values.configType === 'manual' || !baseUrl ? 'number' : null,
+            type: 'number',
             name: 'pageLimit',
             message: 'Set the limit of pages to be crawled (0 represents unlimited pages):',
             validate: value => Number.isInteger(value) && value < 0 ? 'You need to inform a valid number' : true,
             initial: !baseUrl ? projectConfig.pageLimit : 0
-        },
-        {
-            type: (prev, values) => values.configType === 'manual' || !baseUrl ? 'select' : null,
-            name: 'crawlingSpeed',
-            message: 'Choose the crawling speed:',
-            choices: [
-                { title: 'Fast speed', description: 'No daley during the crawler process (Suitable for under than 100 pages).', value: 'fast' },
-                { title: 'Medium speed', description: 'Add a 2s delay for each 50 crawled pages (Suitable between 100 to 500 pages).', value: 'medium' },
-                { title: 'Slow speed', description: 'Add a 2s delay for each 10 crawled pages (Suitable for more then 500 pages).', value: 'slow' },
-            ],
-            initial: !baseUrl ? crawlingSpeedSelectedOption[projectConfig.crawlingSpeed] : 0
         }
     ];
 
@@ -551,10 +536,9 @@ async function configureProjectStep(baseUrl = null) {
         baseUrl: localBaseUrl,
         folderRestriction: configureProjectResult.folderRestriction,
         pageLimit: preDefinedConfigs ? preDefinedConfigs.pageLimit : configureProjectResult.pageLimit,
-        crawlingSpeed: preDefinedConfigs ? preDefinedConfigs.crawlingSpeed : configureProjectResult.crawlingSpeed,
     };
 
-    if (!preDefinedConfigs?.crawlingSpeed && !configureProjectResult?.crawlingSpeed) {
+    if (configureProjectResult?.pageLimit === undefined) {
         console.log(boxedInfoMessage(
             `Project ${baseUrl ? 'creation' : 'configuration'} process canceled`,
             "You will be redirected back to the first \n step in a few seconds!",
@@ -575,7 +559,6 @@ async function configureProjectStep(baseUrl = null) {
             sessionId: sessionId,
             folderRestriction: projectCurrentConfig.folderRestriction,
             pageLimit: projectCurrentConfig.pageLimit,
-            crawlingSpeed: projectCurrentConfig.crawlingSpeed
         }, true);
     } else {
         createProject(
@@ -583,7 +566,6 @@ async function configureProjectStep(baseUrl = null) {
             sessionId,
             projectCurrentConfig.folderRestriction,
             projectCurrentConfig.pageLimit,
-            projectCurrentConfig.crawlingSpeed
         );
     }
 

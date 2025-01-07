@@ -226,9 +226,9 @@ function setRunningProject(baseUrl, sessionId = false) {
     }
 }
 
-const createProject = (baseUrl, sessionId, folderRestriction = null, pageLimit = 500, crawlingSpeed = 'fast') => {
+const createProject = (baseUrl, sessionId, folderRestriction = null, pageLimit = 500) => {
     const folderRestrictionFormatted = getParsedFolderRestriction(folderRestriction);
-    const projectConfig = { baseUrl, folderRestriction: folderRestrictionFormatted, pageLimit, crawlingSpeed };
+    const projectConfig = { baseUrl, folderRestriction: folderRestrictionFormatted, pageLimit };
     const projectName = getProjectName(baseUrl);
     const projectBaseData = getProjectBaseListToCraw(baseUrl, folderRestrictionFormatted);
 
@@ -287,8 +287,7 @@ function updateProjectConfig(config, isTempConfig = false) {
             baseUrl: config.baseUrl,
             sessionId: config.sessionId,
             folderRestriction: folderRestrictionFormatted,
-            pageLimit: config.pageLimit,
-            crawlingSpeed: config.crawlingSpeed
+            pageLimit: config.pageLimit
         }
     };
 
