@@ -362,14 +362,14 @@ const startCrawlingProcess = async (baseUrl, linkList = null) => {
         startCrawlingProcess(baseUrl, newLinkListItems);
     } catch (error) {
         const responseUrl = error.request?.res?.responseUrl || null;
-        const statusCode = error?.code === 'ETIMEDOUT' ? 408 : error.status;
+        const statusCode = error?.code === 'ETIMEDOUT' || error?.code === 'ECONNABORTED' ? 408 : error.status;
 
         const updatedLinkList = linkList.map(link => {
             if (link.url === linkToCrawl.url) {
                 return {
                     ...link,
                     vl: true,
-                    sc: statusCode
+                    sc: statusCode || 500
                 }
             }
 
