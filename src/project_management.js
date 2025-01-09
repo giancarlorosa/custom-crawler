@@ -247,6 +247,7 @@ const createProject = (baseUrl, sessionId, folderRestriction = null, pageLimit =
     // Files
     const newProjectConfigFile = `${newProjectFolder}/config.json`;
     const newProjectMappedLinksFile = `${newProjectDataFolder}/mapped_links.json`;
+    const newProjectCrawlerTimeFile = `${newProjectDataFolder}/crawler_timer.json`;
     const newProjectRedirectLinksFile = `${newProjectDataFolder}/redirect_links.json`;
     const newProjectAbsoluteLinksFile = `${newProjectDataFolder}/absolute_links.json`;
     const newProjectInternalLinksFile = `${newProjectDataFolder}/internal_links.json`;
@@ -264,6 +265,7 @@ const createProject = (baseUrl, sessionId, folderRestriction = null, pageLimit =
         // File Creation
         fs.writeFileSync(newProjectConfigFile, JSON.stringify(projectConfig), 'utf8');
         fs.writeFileSync(newProjectMappedLinksFile, JSON.stringify(projectBaseData), 'utf8');
+        fs.writeFileSync(newProjectCrawlerTimeFile, '', 'utf8');
         fs.writeFileSync(newProjectRedirectLinksFile, '', 'utf8');
         fs.writeFileSync(newProjectAbsoluteLinksFile, '', 'utf8');
         fs.writeFileSync(newProjectInternalLinksFile, '', 'utf8');
@@ -322,6 +324,7 @@ const resetProject = (baseUrl) => {
 
     try {
         fs.writeFileSync(`${projectDataFolder}/mapped_links.json`, JSON.stringify(projectBaseData), 'utf8');
+        fs.writeFileSync(`${projectDataFolder}/crawler_timer.json`, '', 'utf8');
         fs.writeFileSync(`${projectDataFolder}/redirect_links.json`, '', 'utf8');
         fs.writeFileSync(`${projectDataFolder}/absolute_links.json`, '', 'utf8');
         fs.writeFileSync(`${projectDataFolder}/internal_links.json`, '', 'utf8');

@@ -26,14 +26,15 @@ const {
 const {
     getCrawledLinks,
     storeMappedLinks,
-    startCrawlingProcess
+    startCrawlingProcess,
+    registerCrawlingStart,
+    registerCrawlingResume
 } = require('./crawler');
 const {
     printFilterStats,
     exportFilteredData,
     filterLinksWithError,
-    filterDocumentsWithError,
-    filterAnchorsWithError
+    filterDocumentsWithError
 } = require('./filters');
 
 const sessionId = getSessionId();
@@ -168,8 +169,6 @@ function printProjectConfig(configType = null) {
             runningProjectFootnotes.push(`Links with error: ${chalk.bold.redBright(linksWithError.length)}`)
         }
 
-        console.log(projectConfigDisplay)
-
         console.log(boxedConfigMessage(
             boxTitle,
             projectConfigDisplay,
@@ -287,13 +286,16 @@ async function firstStep(configType = null) {
 }
 
 async function runCrawlingProcessStep(start = false) {
-    const { activeProject, crawledLinks } = getProjectVerification();
+    const { activeProject, crawledLinks, hasVisitedLinks } = getProjectVerification();
+    const baseUrl = activeProject.baseUrl;
+    const sectionId = getSessionId();
 
     if (!start) {
         return confirmRunCrawlingProcessStep();
     }
 
-    return startCrawlingProcess(activeProject.baseUrl, crawledLinks);
+    hasVisitedLinks ? registerCrawlingResume(baseUrl, sectionId) : registerCrawlingStart(baseUrl, sectionId);
+    return startCrawlingProcess(baseUrl, sectionId, crawledLinks);
 }
 
 async function confirmRunCrawlingProcessStep() {

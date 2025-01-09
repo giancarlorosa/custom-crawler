@@ -12,7 +12,11 @@ const {
     getProjectConfig,
     getBaseDataObj
 } = require('./project_management.js');
-const { boxedInfoMessage, isDocumentLink } = require('./utils.js');
+const {
+    boxedInfoMessage,
+    isDocumentLink,
+    getSessionId
+} = require('./utils.js');
 
 const isRestrictedLink = (pathname, baseUrl) => {
     const projectConfig = getProjectConfig(baseUrl);
@@ -138,6 +142,50 @@ function getCrawledDataLinks(baseUrl, dataType) {
     }
 }
 
+function getCrawlerTimerData(baseUrl) {
+    try {
+        const projectName = getProjectName(baseUrl);
+        const timerData = fs.readFileSync(`${projectsFolder}/${projectName}/data/crawler_timer.json`, 'utf8');
+        return JSON.parse(timerData);
+    } catch (error) {
+        return false;
+    }
+}
+
+function getCrawlerTimerSections(baseUrl) {
+    try {
+        const projectName = getProjectName(baseUrl);
+        const timerData = fs.readFileSync(`${projectsFolder}/${projectName}/data/crawler_timer.json`, 'utf8');
+        const parsedTimerData = JSON.parse(timerData);
+
+        if (!parsedTimerData) {
+            return false;
+        }
+
+        let totalSpentTime = 0
+        let foundSectionsTime = [];
+
+        parsedTimerData.forEach(sectionTime => {
+            for (const [started, ended] of Object.entries(sectionTime)) {
+                if(ended) {
+                    const spentTime = Math.round((((ended - started) % 86400000) % 3600000) / 60000);
+
+                    totalSpentTime += spentTime
+                    foundSectionsTime.push(spentTime);
+                }
+            }
+        })
+
+        return {
+            totalSpent: totalSpentTime,
+            foundSections: foundSectionsTime
+        };
+    } catch (error) {
+        console.log(error);
+        return false;
+    }
+}
+
 const linksExists = (url, linkList) => {
     return linkList.filter(link => link.url === url).length > 0;
 }
@@ -180,7 +228,59 @@ function storeRedirectLinks(baseUrl, url, responseUrl) {
     }
 }
 
-function printCrawlingStats(baseUrl, linkList, testingLink = null, processedTime = null) {
+function registerCrawlingStart(baseUrl, sessionId) {
+    try {
+        const projectName = getProjectName(baseUrl);
+        const registeredTimer = {};
+        registeredTimer[sessionId] = null;
+
+        fs.writeFileSync(`${projectsFolder}/${projectName}/data/crawler_timer.json`, JSON.stringify([registeredTimer]), 'utf8');
+        return true;
+    } catch (error) {
+        console.log(chalk.white.bgRed('ERROR?'), error)
+        return false;
+    }
+}
+
+function registerCrawlingResume(baseUrl, sessionId) {
+    try {
+        const projectName = getProjectName(baseUrl);
+        const crawlingTimerData = getCrawlerTimerData(baseUrl, sessionId);
+        const newCrawlerTimer = {};
+        newCrawlerTimer[sessionId] = null;
+
+        fs.writeFileSync(`${projectsFolder}/${projectName}/data/crawler_timer.json`, JSON.stringify([...crawlingTimerData, newCrawlerTimer]), 'utf8');
+        return true;
+    } catch (error) {
+        console.log(chalk.white.bgRed('ERROR?'), error)
+        return false;
+    }
+}
+
+function registerCrawlingProgress(baseUrl, sessionID) {
+    try {
+        const projectName = getProjectName(baseUrl);
+        const crawlingTimerData = getCrawlerTimerData(baseUrl, sessionID);
+        const updatedCrawlingTimerData = crawlingTimerData.map(timer => {
+            if (timer[sessionID] !== undefined) {
+                const timerObj = timer
+                timerObj[sessionID] = Date.now();
+
+                return timerObj;
+            }
+
+            return timer;
+        });
+
+        fs.writeFileSync(`${projectsFolder}/${projectName}/data/crawler_timer.json`, JSON.stringify(updatedCrawlingTimerData), 'utf8');
+        return true;
+    } catch (error) {
+        console.log(chalk.white.bgRed('ERROR?'), error)
+        return false;
+    }
+}
+
+function printCrawlingStats(baseUrl, linkList, testingLink = null) {
     if (!linkList || linkList.length < 1) {
         return false;
     }
@@ -193,8 +293,21 @@ function printCrawlingStats(baseUrl, linkList, testingLink = null, processedTime
     let message = chalk.bold("Testing url: ") + testingLink;
 
     if (!testingLink) {
+        const crawlerTimer = getCrawlerTimerSections(baseUrl);
+        const foundSections = crawlerTimer.foundSections.length;
         title = `Crawling process finished for ${baseUrl}`;
-        message = `Crawling process finished in ${chalk.bold.greenBright(`${processedTime} minutes`)}`;
+        message = `Crawling process finished in ${chalk.bold.greenBright(crawlerTimer.totalSpent)} minutes.`;
+
+        if (foundSections > 1) {
+            let sectionTimesMessage = [];
+            sectionTimesMessage.push(`This process was divided into ${chalk.bold.yellowBright(foundSections)} sections of:`);
+
+            for (let i = 0; i < foundSections; i++) {
+                sectionTimesMessage.push(`${chalk.bold(`Section ${i + 1}`)}: ${chalk.bold.cyanBright(crawlerTimer.foundSections[i])} minutes`);
+            }
+
+            message = `${message}\n${sectionTimesMessage.join("\n")}`;
+        }
     }
 
     let footNotes = [];
@@ -212,20 +325,15 @@ function printCrawlingStats(baseUrl, linkList, testingLink = null, processedTime
     ));
 }
 
-const crawlingProcessStarted = new Date();
-const startCrawlingProcess = async (baseUrl, linkList = null) => {
+const startCrawlingProcess = async (baseUrl, sessionID, linkList = null) => {
     const projectConfig = getProjectConfig(baseUrl);
     const baseUrlObj = new URL(baseUrl);
     const linkToCrawl = linkList.filter(link => link.vl === false)[0];
 
     if (!projectConfig || !linkList || !linkToCrawl) {
         storeMappedLinks(baseUrl, linkList);
-
-        const crawlingProcessEnded = new Date();
-        const diffMs = (crawlingProcessEnded - crawlingProcessStarted)
-        const diffMins = Math.round(((diffMs % 86400000) % 3600000) / 60000);
-
-        printCrawlingStats(baseUrl, linkList, false, diffMins);
+        registerCrawlingProgress(baseUrl, sessionID);
+        printCrawlingStats(baseUrl, linkList);
 
         return false;
     }
@@ -235,6 +343,7 @@ const startCrawlingProcess = async (baseUrl, linkList = null) => {
     const externalLink = linkToCrawlUrlObj.hostname !== baseUrlObj.hostname;
     const documentLink = isDocumentLink(linkToCrawl.url);
 
+    registerCrawlingProgress(baseUrl, sessionID);
     printCrawlingStats(baseUrl, linkList, linkToCrawl.url);
 
     try {
@@ -359,7 +468,7 @@ const startCrawlingProcess = async (baseUrl, linkList = null) => {
             storeMappedLinks(baseUrl, newLinkListItems);
         }
 
-        startCrawlingProcess(baseUrl, newLinkListItems);
+        startCrawlingProcess(baseUrl, sessionID, newLinkListItems);
     } catch (error) {
         const responseUrl = error.request?.res?.responseUrl || null;
         const statusCode = error?.code === 'ETIMEDOUT' || error?.code === 'ECONNABORTED' ? 408 : error.status;
@@ -380,7 +489,7 @@ const startCrawlingProcess = async (baseUrl, linkList = null) => {
             storeMappedLinks(baseUrl, updatedLinkList);
         }
 
-        startCrawlingProcess(baseUrl, updatedLinkList);
+        startCrawlingProcess(baseUrl, sessionID, updatedLinkList);
     }
 }
 
@@ -389,5 +498,7 @@ module.exports = {
     getCrawledLinks,
     getCrawledDataLinks,
     getValidUrl,
+    registerCrawlingStart,
+    registerCrawlingResume,
     storeMappedLinks
 }
