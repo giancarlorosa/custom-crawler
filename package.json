@@ -1,6 +1,6 @@
 {
   "name": "node-custom-crawler",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Tool to crawl a website and find broken links, documents, redirects and other custom filters.",
   "main": "index.js",
   "scripts": {
