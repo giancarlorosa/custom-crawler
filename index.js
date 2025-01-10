@@ -1,6 +1,6 @@
-const { firstStep } = require('./src/steps');
+const { versionCheckStep } = require('./src/steps');
 
 (async () => {
-    await firstStep();
+    await versionCheckStep();
 })();
 

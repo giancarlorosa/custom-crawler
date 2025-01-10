@@ -1,13 +1,17 @@
 {
-  "name": "webscrapping",
-  "version": "1.0.0",
-  "description": "",
+  "name": "node-custom-crawler",
+  "version": "0.0.0",
+  "description": "Tool to crawl a website and find broken links, documents, redirects and other custom filters.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
-  "author": "",
+  "author": {
+        "name": "Giancarlo Rosa",
+        "email": "giannesdabrun@hotmail.com",
+        "url": "https://cdfdigital.com.br/"
+  },
   "license": "ISC",
   "dependencies": {
     "axios": "^1.7.9",

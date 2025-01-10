@@ -36,6 +36,13 @@ const {
     filterLinksWithError,
     filterDocumentsWithError
 } = require('./filters');
+const {
+    hasUpdate,
+    getRemoveVersion,
+    getLocalVersion,
+    updateVersionCheckerFile,
+    removerVersionCheckerFile
+} = require('./version_checker');
 
 const sessionId = getSessionId();
 
@@ -66,15 +73,6 @@ function getProjectVerification() {
 
         return availableProjects.length > 0;
     }
-
-    // console.log('Running projects:', runningProjects);
-    // console.log('Active project:', activeProject);
-    // console.log('Crawled links:', crawledLinks.length);
-    // console.log('Visited links:', visitedLinks.length);
-    // console.log('Not visited links:', notVisitedLinks.length);
-    // console.log('Has visited links:', hasVisitedLinks);
-    // console.log('Has not visited links:', hasNotVisitedLinks);
-    // console.log('Has other projects:', hasOtherRunningProjects());
 
     return {
         runningProjects,
@@ -177,6 +175,105 @@ function printProjectConfig(configType = null) {
             true
         ));
     }
+}
+
+async function versionCheckStep() {
+    const showUpdate = await hasUpdate();
+    const remoteVersion = await getRemoveVersion();
+    const localVersion = getLocalVersion();
+
+    const versionCheckPrompt = [
+        {
+            type: 'select',
+            name: 'updateAction',
+            message: 'What would you like to do:',
+            choices: [
+                {
+                    title: 'Update now!',
+                    description: 'You need to download the lasted updates before continue.',
+                    value: 'update',
+                },
+                {
+                    title: 'Remember me again tomorrow!',
+                    value: '1',
+                },
+                {
+                    title: 'Remember me again in 3 days',
+                    value: '3',
+                },
+                {
+                    title: 'Remember me again in 5 days',
+                    value: '5',
+                },
+                {
+                    title: 'Remember me again in 7 days',
+                    value: '7',
+                },
+                {
+                    title: 'Remember me again in 14 days',
+                    value: '14',
+                },
+                {
+                    title: 'Remember me again in 30 days',
+                    value: '30',
+                },
+                {
+                    title: 'Cancel',
+                    value: 'cancel'
+                }
+            ],
+        }
+    ];
+
+    if (showUpdate) {
+        const boxTitle = 'CUSTOM CRAWLER NEW UPDATE AVAILABLE!!!';
+        let message = [];
+        message.push('There is a new version available to download.');
+        message.push(`New version: ${chalk.bold.cyanBright(`v${remoteVersion}`)}`);
+
+        console.log(boxedInfoMessage(
+            boxTitle,
+            message.join("\n"),
+            `Current Version: ${chalk.bold.yellowBright(`v${localVersion}`)}`,
+            {
+                type: 'warning',
+                marginTop: true
+            }
+        ));
+
+        const versionCheckResult = await prompts(versionCheckPrompt);
+
+        if (versionCheckResult?.updateAction === undefined) {
+            return;
+        }
+
+        switch(versionCheckResult.updateAction) {
+            case 'update':
+                console.clear()
+                console.log(boxedInfoMessage(
+                    boxTitle,
+                    "To download the lasted updates, run the\nfollowing command:",
+                    chalk.bold.yellowBright('git pull origin main'),
+                    'info'
+                ));
+                removerVersionCheckerFile()
+                return;
+            case 'cancel':
+                return;
+            default:
+                console.clear()
+                console.log(boxedInfoMessage(
+                    boxTitle,
+                    "You will be remembered of this update again:",
+                    chalk.bold.yellowBright(`In ${versionCheckResult.updateAction} days`),
+                    'info'
+                ));
+                await new Promise(resolve => setTimeout(resolve, 5000));
+                updateVersionCheckerFile(versionCheckResult.updateAction);
+        }
+    }
+
+    return firstStep();
 }
 
 async function firstStep(configType = null) {
@@ -750,5 +847,5 @@ async function exportFilteredDataStep(data, fileName) {
 }
 
 module.exports = {
-    firstStep
+    versionCheckStep
 }
