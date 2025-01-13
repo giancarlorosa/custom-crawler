@@ -12,7 +12,13 @@ As it was necessary to create it quickly, some features were not included, like 
 
 This is a **Node** project using just Javascript in its core.
 
-To run the project on your computer, you will need **Node v22** installed.
+To run the project on your computer, you will need **Node v22** installed and **NPM** too.
+
+To install the project, run the following command:
+
+```bash
+npm install
+```
 
 As the project uses **Prompts** package, you need just one command to run the project. All other options will be shown as options to be selected.
 
